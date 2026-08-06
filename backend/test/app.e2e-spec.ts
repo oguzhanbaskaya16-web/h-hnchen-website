@@ -101,6 +101,27 @@ describe('HealthController (e2e)', () => {
       });
   });
 
+  it('/api/v1/carts (POST) erstellt einen leeren Warenkorb', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      status: 'offen',
+      items: [],
+      total: 0,
+    });
+
+    expect(response.body.sessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+
+    expect(Number.isNaN(Date.parse(response.body.createdAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(response.body.updatedAt))).toBe(false);
+
+    expect(response.body).not.toHaveProperty('id');
+  });
+
   afterAll(async () => {
     await app.close();
   });
