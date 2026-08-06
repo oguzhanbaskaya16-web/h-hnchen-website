@@ -1,0 +1,254 @@
+.openingBar,
+.openingBar * {
+  box-sizing: border-box;
+}
+
+.openingBar {
+  align-items: center;
+  background: #741321;
+  color: #fff8f1;
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  letter-spacing: 0.035em;
+  min-height: 34px;
+  padding: 7px 18px;
+}
+
+.statusDot {
+  background: #7ccf86;
+  border: 2px solid rgb(255 255 255 / 42%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgb(124 207 134 / 13%);
+  height: 8px;
+  width: 8px;
+}
+
+.divider {
+  color: #d7ab83;
+}
+
+.siteHeader,
+.siteHeader * {
+  box-sizing: border-box;
+}
+
+.siteHeader {
+  background: rgb(255 253 249 / 96%);
+  border-bottom: 1px solid #eadfd3;
+  box-shadow: 0 8px 25px rgb(65 31 24 / 7%);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.headerInner {
+  align-items: center;
+  display: grid;
+  gap: 30px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 0 auto;
+  max-width: 1240px;
+  min-height: 82px;
+  padding: 12px 32px;
+  width: 100%;
+}
+
+.brand {
+  align-items: center;
+  color: #321d1b;
+  display: inline-flex;
+  gap: 11px;
+  min-width: max-content;
+  text-decoration: none;
+}
+
+.brandIcon {
+  align-items: center;
+  background: linear-gradient(145deg, #f4e4cf, #fffaf3);
+  border: 1px solid #e3cfb6;
+  border-radius: 14px;
+  box-shadow: 0 5px 14px rgb(100 58 35 / 10%);
+  display: flex;
+  font-size: 1.55rem;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.brandText {
+  display: grid;
+  gap: 2px;
+}
+
+.brandText strong {
+  color: #741321;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.08rem;
+  letter-spacing: 0.035em;
+  line-height: 1.05;
+}
+
+.brandText small {
+  color: #8a776c;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.mainNav {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.mainNav a {
+  border-radius: 999px;
+  color: #584844;
+  font-size: 0.86rem;
+  font-weight: 750;
+  padding: 10px 13px;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+  white-space: nowrap;
+}
+
+.mainNav a:hover {
+  background: #f6ede3;
+  color: #741321;
+  transform: translateY(-1px);
+}
+
+.mainNav a.active {
+  background: #741321;
+  color: #ffffff;
+}
+
+.cartLink,
+.orderLink {
+  align-items: center;
+  background: #741321;
+  border: 1px solid #741321;
+  border-radius: 12px;
+  box-shadow: 0 7px 16px rgb(116 19 33 / 17%);
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: center;
+  min-height: 42px;
+  padding: 9px 14px;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+  white-space: nowrap;
+}
+
+.cartLink:hover,
+.orderLink:hover {
+  background: #8e1a2b;
+  box-shadow: 0 9px 20px rgb(116 19 33 / 22%);
+  transform: translateY(-1px);
+}
+
+.cartIcon {
+  font-size: 1rem;
+}
+
+.brand:focus-visible,
+.mainNav a:focus-visible,
+.cartLink:focus-visible,
+.orderLink:focus-visible {
+  outline: 3px solid rgb(192 137 79 / 42%);
+  outline-offset: 3px;
+}
+
+@media (max-width: 900px) {
+  .headerInner {
+    gap: 16px;
+    padding-inline: 20px;
+  }
+
+  .mainNav a {
+    font-size: 0.79rem;
+    padding-inline: 9px;
+  }
+
+  .brandText small {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .headerInner {
+    gap: 11px 14px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 0;
+    padding: 12px 16px 0;
+  }
+
+  .brandIcon {
+    border-radius: 11px;
+    font-size: 1.28rem;
+    height: 39px;
+    width: 39px;
+  }
+
+  .brandText strong {
+    font-size: 0.95rem;
+  }
+
+  .mainNav {
+    border-top: 1px solid #eee4da;
+    gap: 3px;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-inline: -16px;
+    overflow-x: auto;
+    padding: 8px 16px 10px;
+    scrollbar-width: none;
+  }
+
+  .mainNav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mainNav a {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    padding: 8px 10px;
+  }
+
+  .cartLink,
+  .orderLink {
+    border-radius: 10px;
+    min-height: 39px;
+    padding: 8px 11px;
+  }
+}
+
+@media (max-width: 390px) {
+  .openingBar {
+    font-size: 0.68rem;
+  }
+
+  .brandText strong {
+    font-size: 0.86rem;
+  }
+
+  .cartLink,
+  .orderLink {
+    font-size: 0.7rem;
+  }
+}
