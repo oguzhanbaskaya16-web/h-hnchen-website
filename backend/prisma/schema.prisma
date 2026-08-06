@@ -68,8 +68,9 @@ model Product {
   isAvailable            Boolean         @default(true) @map("ist_verfuegbar")
   category               ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
-  mainProductOptions ProductOption[] @relation("MainProductOptions")
-  usedAsOption       ProductOption[] @relation("OptionProductOptions")
+  optionGroups       ProductOptionGroup[]
+  mainProductOptions ProductOption[]      @relation("MainProductOptions")
+  usedAsOption       ProductOption[]      @relation("OptionProductOptions")
 
   recommendations        ProductRecommendation[] @relation("ProductRecommendations")
   recommendedForProducts ProductRecommendation[] @relation("RecommendedProductRecommendations")
@@ -80,20 +81,38 @@ model Product {
   @@map("produkte")
 }
 
+model ProductOptionGroup {
+  id            Int             @id @default(autoincrement()) @map("produktoptionsgruppe_id")
+  mainProductId Int             @map("hauptprodukt_id")
+  name          String          @db.VarChar(100)
+  optionType    String          @map("optionstyp") @db.VarChar(30)
+  minSelections Int             @default(0) @map("minimale_auswahl")
+  maxSelections Int             @default(1) @map("maximale_auswahl")
+  sortOrder     Int?            @map("sortierreihenfolge")
+  mainProduct   Product         @relation(fields: [mainProductId], references: [id], onDelete: Cascade)
+  options       ProductOption[]
+
+  @@unique([mainProductId, optionType])
+  @@map("produktoptionsgruppen")
+}
+
 model ProductOption {
   id              Int     @id @default(autoincrement()) @map("produktoption_id")
+  optionGroupId   Int     @map("produktoptionsgruppe_id")
   mainProductId   Int     @map("hauptprodukt_id")
   optionProductId Int     @map("optionsprodukt_id")
-  optionType      String  @map("optionstyp") @db.VarChar(30)
   surcharge       Decimal @default(0.00) @map("aufpreis") @db.Decimal(10, 2)
-  allowMultiple   Boolean @default(false) @map("mehrfachauswahl")
+  sortOrder       Int?    @map("sortierreihenfolge")
 
-  mainProduct   Product @relation("MainProductOptions", fields: [mainProductId], references: [id], onDelete: Cascade)
-  optionProduct Product @relation("OptionProductOptions", fields: [optionProductId], references: [id], onDelete: Cascade)
+  optionGroup   ProductOptionGroup @relation(fields: [optionGroupId], references: [id], onDelete: Cascade)
+  mainProduct   Product            @relation("MainProductOptions", fields: [mainProductId], references: [id], onDelete: Cascade)
+  optionProduct Product            @relation("OptionProductOptions", fields: [optionProductId], references: [id], onDelete: Cascade)
 
+  cartItemOptions  CartItemOption[]
   orderItemOptions OrderItemOption[]
 
   @@unique([mainProductId, optionProductId])
+  @@index([optionGroupId])
   @@map("produktoptionen")
 }
 
@@ -123,17 +142,33 @@ model Cart {
 }
 
 model CartItem {
-  id        Int     @id @default(autoincrement()) @map("warenkorbposition_id")
-  cartId    Int     @map("warenkorb_id")
-  productId Int     @map("produkt_id")
-  quantity  Int     @default(1) @map("menge")
-  unitPrice Decimal @map("einzelpreis") @db.Decimal(10, 2)
+  id               Int     @id @default(autoincrement()) @map("warenkorbposition_id")
+  cartId           Int     @map("warenkorb_id")
+  productId        Int     @map("produkt_id")
+  quantity         Int     @default(1) @map("menge")
+  unitPrice        Decimal @map("einzelpreis") @db.Decimal(10, 2)
+  configurationKey String  @map("konfigurationsschluessel") @db.VarChar(500)
 
-  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cart    Cart             @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  options CartItemOption[]
 
-  @@unique([cartId, productId])
+  @@unique([cartId, configurationKey])
   @@map("warenkorbpositionen")
+}
+
+model CartItemOption {
+  id              Int     @id @default(autoincrement()) @map("warenkorbpositionsoption_id")
+  cartItemId      Int     @map("warenkorbposition_id")
+  productOptionId Int     @map("produktoption_id")
+  optionName      String  @map("optionsname") @db.VarChar(150)
+  surcharge       Decimal @map("aufpreis") @db.Decimal(10, 2)
+
+  cartItem      CartItem      @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  productOption ProductOption @relation(fields: [productOptionId], references: [id], onDelete: Restrict)
+
+  @@unique([cartItemId, productOptionId])
+  @@map("warenkorbpositionsoptionen")
 }
 
 model OrderStatus {

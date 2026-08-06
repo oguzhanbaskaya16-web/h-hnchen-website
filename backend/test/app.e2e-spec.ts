@@ -3,16 +3,33 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { PrismaExceptionFilter } from '../src/common/filters/prisma-exception.filter';
+
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../src/generated/prisma/client';
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
+  let prisma: PrismaClient;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
+    const connectionString = process.env['DATABASE_URL'];
+
+    if (!connectionString) {
+      throw new Error('DATABASE_URL ist nicht gesetzt.');
+    }
+
+    const adapter = new PrismaPg({ connectionString });
+    prisma = new PrismaClient({ adapter });
+
     app = moduleFixture.createNestApplication();
+
+    app.useGlobalFilters(new PrismaExceptionFilter());
 
     app.useGlobalPipes(
       new ValidationPipe({
@@ -28,6 +45,58 @@ describe('HealthController (e2e)', () => {
 
     await app.init();
   });
+
+  async function getConfiguredProduct() {
+    const product = await prisma.product.findFirstOrThrow({
+      where: {
+        name: 'Halbes Hähnchen',
+      },
+      include: {
+        optionGroups: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+          include: {
+            options: {
+              orderBy: {
+                sortOrder: 'asc',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const optionIds = product.optionGroups.map((group) => {
+      const option = group.options[0];
+
+      if (!option) {
+        throw new Error(
+          `Die Optionsgruppe "${group.name}" enthält keine Produktoption.`,
+        );
+      }
+
+      return option.id;
+    });
+
+    const alternativeOptionIds = product.optionGroups.map((group) => {
+      const option = group.options[1];
+
+      if (!option) {
+        throw new Error(
+          `Die Optionsgruppe "${group.name}" enthält keine zweite Produktoption.`,
+        );
+      }
+
+      return option.id;
+    });
+
+    return {
+      product,
+      optionIds,
+      alternativeOptionIds,
+    };
+  }
 
   it('/api/v1/health (GET) prüft Anwendung und Datenbank', async () => {
     await request(app.getHttpServer())
@@ -109,6 +178,523 @@ describe('HealthController (e2e)', () => {
       });
   });
 
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) ändert die Menge einer Position', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const increasedResponse = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .send({
+        quantity: 3,
+      })
+      .expect(200);
+
+    expect(increasedResponse.body.items).toHaveLength(1);
+    expect(increasedResponse.body.items[0]).toMatchObject({
+      itemId,
+      quantity: 3,
+    });
+
+    const decreasedResponse = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .send({
+        quantity: 1,
+      })
+      .expect(200);
+
+    expect(decreasedResponse.body.items).toHaveLength(1);
+    expect(decreasedResponse.body.items[0]).toMatchObject({
+      itemId,
+      quantity: 1,
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) entfernt eine Position bei Menge 0', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .send({
+        quantity: 0,
+      })
+      .expect(200);
+
+    expect(response.body.items).toEqual([]);
+    expect(response.body.total).toBe('0.00');
+  });
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt ungültige Positions-IDs ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/ungueltig`)
+      .send({
+        quantity: 1,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'Die Warenkorbpositions-ID muss eine positive ganze Zahl sein.',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt Positionen aus einem anderen Warenkorb ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const firstCartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const secondCartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${firstCartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const response = await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${secondCartResponse.body.sessionId}/items/${itemId}`,
+      )
+      .send({
+        quantity: 2,
+      })
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Warenkorbposition wurde nicht gefunden.',
+    });
+  });
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) ändert die Optionsauswahl', async () => {
+    const { product, optionIds, alternativeOptionIds } =
+      await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .send({
+        quantity: 2,
+        optionIds: alternativeOptionIds,
+      })
+      .expect(200);
+
+    expect(response.body.items).toHaveLength(1);
+
+    expect(response.body.items[0]).toMatchObject({
+      itemId,
+      quantity: 2,
+      product: {
+        id: product.id,
+        name: product.name,
+      },
+    });
+
+    const returnedOptionIds = response.body.items[0].options
+      .map((option: { id: number }) => option.id)
+      .sort((first: number, second: number) => first - second);
+
+    expect(returnedOptionIds).toEqual(
+      [...alternativeOptionIds].sort((first, second) => first - second),
+    );
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) erlaubt ein Produkt ohne optionale Optionen', async () => {
+    const { product } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds: [],
+      })
+      .expect(201);
+
+    expect(response.body.items).toHaveLength(1);
+
+    expect(response.body.items[0]).toMatchObject({
+      itemId: expect.any(Number),
+      product: {
+        id: product.id,
+        name: product.name,
+      },
+      quantity: 1,
+      baseUnitPrice: Number(product.price).toFixed(2),
+      optionSurcharge: '0.00',
+      unitTotal: Number(product.price).toFixed(2),
+      options: [],
+      lineTotal: Number(product.price).toFixed(2),
+    });
+
+    expect(response.body.total).toBe(Number(product.price).toFixed(2));
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (DELETE) entfernt eine Position', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sessionId: cartResponse.body.sessionId,
+      status: 'offen',
+      items: [],
+      total: '0.00',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (DELETE) lehnt ungültige Positions-IDs ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/ungueltig`)
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'Die Warenkorbpositions-ID muss eine positive ganze Zahl sein.',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (DELETE) lehnt Positionen aus einem anderen Warenkorb ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const firstCartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const secondCartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${firstCartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    const response = await request(app.getHttpServer())
+      .delete(
+        `/api/v1/carts/${secondCartResponse.body.sessionId}/items/${itemId}`,
+      )
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Warenkorbposition wurde nicht gefunden.',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (DELETE) lehnt geschlossene Warenkörbe ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cart = await prisma.cart.create({
+      data: {
+        sessionId: crypto.randomUUID(),
+        status: 'abgeschlossen',
+      },
+    });
+
+    const item = await prisma.cartItem.create({
+      data: {
+        cartId: cart.id,
+        productId: product.id,
+        quantity: 1,
+        unitPrice: product.price,
+        configurationKey: `product:${product.id}|options:${optionIds.join(',')}`,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cart.sessionId}/items/${item.id}`)
+      .expect(409);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (DELETE) behandelt unbekannte Positionen', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/999999`)
+      .expect(404);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) verlangt mindestens ein Feld', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+      )
+      .send({})
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt Mengen über 99 ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+      )
+      .send({
+        quantity: 100,
+      })
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt unbekannte Optionen ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+      )
+      .send({
+        optionIds: [999999],
+      })
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt doppelte Optionen ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+      )
+      .send({
+        optionIds: [optionIds[0], optionIds[0]],
+      })
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt zwei Optionen derselben Gruppe ab', async () => {
+    const { product } = await getConfiguredProduct();
+
+    const sauceGroup = await prisma.productOptionGroup.findFirstOrThrow({
+      where: {
+        mainProductId: product.id,
+        optionType: 'SAUCE',
+      },
+      include: {
+        options: true,
+      },
+    });
+
+    const optionIds = sauceGroup.options.map((o) => o.id);
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+      )
+      .send({
+        optionIds,
+      })
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) trennt unterschiedliche Optionsauswahlen', async () => {
+    const { product, optionIds, alternativeOptionIds } =
+      await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const url = `/api/v1/carts/${cartResponse.body.sessionId}/items`;
+
+    await request(app.getHttpServer())
+      .post(url)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(url)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds: alternativeOptionIds,
+      })
+      .expect(201);
+
+    expect(response.body.items).toHaveLength(2);
+
+    expect(response.body.items[0].product).toMatchObject({
+      id: product.id,
+      name: product.name,
+    });
+
+    expect(response.body.items[1].product).toMatchObject({
+      id: product.id,
+      name: product.name,
+    });
+
+    expect(response.body.items[0].quantity).toBe(1);
+    expect(response.body.items[1].quantity).toBe(1);
+
+    const returnedOptionSelections = response.body.items.map(
+      (item: { options: Array<{ id: number }> }) =>
+        item.options.map((option) => option.id).sort((a, b) => a - b),
+    );
+
+    expect(returnedOptionSelections).toEqual(
+      expect.arrayContaining([
+        [...optionIds].sort((a, b) => a - b),
+        [...alternativeOptionIds].sort((a, b) => a - b),
+      ]),
+    );
+  });
+
   it('/api/v1/carts (POST) erstellt einen leeren Warenkorb', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/carts')
@@ -131,10 +717,7 @@ describe('HealthController (e2e)', () => {
   });
 
   it('/api/v1/carts/:cartId/items (POST) fügt ein Produkt hinzu', async () => {
-    const menuResponse = await request(app.getHttpServer())
-      .get('/api/v1/menu')
-      .expect(200);
-    const product = menuResponse.body.categories[0].products[0];
+    const { product, optionIds } = await getConfiguredProduct();
 
     const cartResponse = await request(app.getHttpServer())
       .post('/api/v1/carts')
@@ -142,32 +725,71 @@ describe('HealthController (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
-      .send({ productId: product.id, quantity: 2 })
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
       .expect(201);
+
+    const selectedOptions = await prisma.productOption.findMany({
+      where: {
+        id: {
+          in: optionIds,
+        },
+      },
+      include: {
+        optionProduct: true,
+      },
+    });
+
+    const expectedOptionSurcharge = selectedOptions.reduce(
+      (sum, option) => sum + Number(option.surcharge),
+      0,
+    );
+
+    const expectedUnitPrice = Number(product.price) + expectedOptionSurcharge;
+    const expectedLineTotal = expectedUnitPrice * 2;
 
     expect(response.body).toMatchObject({
       sessionId: cartResponse.body.sessionId,
       status: 'offen',
       items: [
         {
-          productId: product.id,
-          name: product.name,
+          itemId: expect.any(Number),
+          product: {
+            id: product.id,
+            name: product.name,
+          },
           quantity: 2,
-          unitPrice: product.price,
-          lineTotal: product.price * 2,
+          baseUnitPrice: Number(product.price).toFixed(2),
+          optionSurcharge: expectedOptionSurcharge.toFixed(2),
+          unitTotal: expectedUnitPrice.toFixed(2),
+          lineTotal: expectedLineTotal.toFixed(2),
         },
       ],
-      total: product.price * 2,
+      total: expectedLineTotal.toFixed(2),
     });
+
+    expect(response.body.items[0].options).toHaveLength(optionIds.length);
+
+    expect(response.body.items[0].options).toEqual(
+      expect.arrayContaining(
+        selectedOptions.map((option) =>
+          expect.objectContaining({
+            id: option.id,
+            name: option.optionProduct.name,
+            surcharge: Number(option.surcharge).toFixed(2),
+          }),
+        ),
+      ),
+    );
 
     expect(response.body).not.toHaveProperty('id');
   });
 
   it('/api/v1/carts/:cartId/items (POST) erhöht vorhandene Menge', async () => {
-    const menuResponse = await request(app.getHttpServer())
-      .get('/api/v1/menu')
-      .expect(200);
-    const product = menuResponse.body.categories[0].products[0];
+    const { product, optionIds } = await getConfiguredProduct();
 
     const cartResponse = await request(app.getHttpServer())
       .post('/api/v1/carts')
@@ -177,12 +799,20 @@ describe('HealthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .post(url)
-      .send({ productId: product.id, quantity: 1 })
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
       .expect(201);
 
     const response = await request(app.getHttpServer())
       .post(url)
-      .send({ productId: product.id, quantity: 2 })
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
       .expect(201);
 
     expect(response.body.items).toHaveLength(1);
@@ -218,7 +848,366 @@ describe('HealthController (e2e)', () => {
       .expect(404);
   });
 
+  it('/api/v1/carts/:cartId/items behält den gespeicherten Grundpreis bei späterer Preisänderung', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const originalPrice = product.price;
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+    const originalUnitTotal = addResponse.body.items[0].unitTotal;
+
+    try {
+      await prisma.product.update({
+        where: {
+          id: product.id,
+        },
+        data: {
+          price: originalPrice.plus(5),
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+        .send({
+          quantity: 2,
+        })
+        .expect(200);
+
+      expect(response.body.items[0]).toMatchObject({
+        itemId,
+        quantity: 2,
+        baseUnitPrice: originalPrice.toFixed(2),
+        unitTotal: originalUnitTotal,
+        lineTotal: (Number(originalUnitTotal) * 2).toFixed(2),
+      });
+    } finally {
+      await prisma.product.update({
+        where: {
+          id: product.id,
+        },
+        data: {
+          price: originalPrice,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/carts/:cartId/items behält gespeicherte Optionsaufpreise bei späterer Preisänderung', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const selectedOption = await prisma.productOption.findUniqueOrThrow({
+      where: {
+        id: optionIds[0],
+      },
+    });
+
+    const originalSurcharge = selectedOption.surcharge;
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+    const originalOptionSurcharge = addResponse.body.items[0].optionSurcharge;
+    const originalUnitTotal = addResponse.body.items[0].unitTotal;
+
+    const storedOption = addResponse.body.items[0].options.find(
+      (option: { id: number }) => option.id === selectedOption.id,
+    );
+
+    expect(storedOption).toBeDefined();
+
+    try {
+      await prisma.productOption.update({
+        where: {
+          id: selectedOption.id,
+        },
+        data: {
+          surcharge: originalSurcharge.plus(5),
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+        .send({
+          quantity: 2,
+        })
+        .expect(200);
+
+      const returnedOption = response.body.items[0].options.find(
+        (option: { id: number }) => option.id === selectedOption.id,
+      );
+
+      expect(returnedOption).toMatchObject({
+        id: selectedOption.id,
+        surcharge: originalSurcharge.toFixed(2),
+      });
+
+      expect(response.body.items[0]).toMatchObject({
+        itemId,
+        quantity: 2,
+        optionSurcharge: originalOptionSurcharge,
+        unitTotal: originalUnitTotal,
+        lineTotal: (Number(originalUnitTotal) * 2).toFixed(2),
+      });
+    } finally {
+      await prisma.productOption.update({
+        where: {
+          id: selectedOption.id,
+        },
+        data: {
+          surcharge: originalSurcharge,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/carts lehnt Änderungen an einem geschlossenen Warenkorb ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    await prisma.cart.update({
+      where: {
+        sessionId: cartResponse.body.sessionId,
+      },
+      data: {
+        status: 'abgeschlossen',
+      },
+    });
+
+    const addAttempt = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(409);
+
+    expect(addAttempt.body).toMatchObject({
+      statusCode: 409,
+      error: 'Conflict',
+    });
+
+    const patchAttempt = await request(app.getHttpServer())
+      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .send({
+        quantity: 2,
+      })
+      .expect(409);
+
+    expect(patchAttempt.body).toMatchObject({
+      statusCode: 409,
+      error: 'Conflict',
+    });
+
+    const deleteAttempt = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .expect(409);
+
+    expect(deleteAttempt.body).toMatchObject({
+      statusCode: 409,
+      error: 'Conflict',
+    });
+  });
+
+  it('/api/v1/carts behandelt ein zwischenzeitlich deaktiviertes Produkt konsistent', async () => {
+    const { product, optionIds, alternativeOptionIds } =
+      await getConfiguredProduct();
+
+    const existingCartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${existingCartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
+      .expect(201);
+
+    const itemId = addResponse.body.items[0].itemId;
+
+    try {
+      await prisma.product.update({
+        where: {
+          id: product.id,
+        },
+        data: {
+          isAvailable: false,
+        },
+      });
+
+      const newCartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/carts/${newCartResponse.body.sessionId}/items`)
+        .send({
+          productId: product.id,
+          quantity: 1,
+          optionIds,
+        })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch(
+          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+        )
+        .send({
+          quantity: 3,
+        })
+        .expect(409);
+
+      const decreasedResponse = await request(app.getHttpServer())
+        .patch(
+          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+        )
+        .send({
+          quantity: 1,
+        })
+        .expect(200);
+
+      expect(decreasedResponse.body.items[0]).toMatchObject({
+        itemId,
+        quantity: 1,
+      });
+
+      await request(app.getHttpServer())
+        .patch(
+          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+        )
+        .send({
+          optionIds: alternativeOptionIds,
+        })
+        .expect(409);
+
+      const deleteResponse = await request(app.getHttpServer())
+        .delete(
+          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+        )
+        .expect(200);
+
+      expect(deleteResponse.body.items).toEqual([]);
+      expect(deleteResponse.body.total).toBe('0.00');
+    } finally {
+      await prisma.product.update({
+        where: {
+          id: product.id,
+        },
+        data: {
+          isAvailable: true,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) lehnt unbekannte Felder ab', async () => {
+    const { product } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        unbekanntesFeld: true,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(response.body.message).toEqual(
+      expect.arrayContaining(['property unbekanntesFeld should not exist']),
+    );
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) lehnt ungültiges JSON ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .set('Content-Type', 'application/json')
+      .send('{"productId": 1, "quantity":')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) lehnt falsche Datentypen ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: 'kein-produkt',
+        quantity: 'keine-menge',
+        optionIds: ['keine-option'],
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(Array.isArray(response.body.message)).toBe(true);
+  });
+
   afterAll(async () => {
     await app.close();
+    await prisma.$disconnect();
   });
 });

@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
@@ -7,18 +6,15 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class AddCartItemDto {
+export class UpdateCartItemDto {
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  productId: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(99)
-  quantity: number;
+  quantity?: number;
 
   @IsOptional()
   @IsArray()

@@ -352,6 +352,18 @@ const menuCategories = [
   },
 ];
 
+async function findProductByName(name: string) {
+  const product = await prisma.product.findFirst({
+    where: { name },
+  });
+
+  if (!product) {
+    throw new Error(`Seed-Produkt "${name}" wurde nicht gefunden.`);
+  }
+
+  return product;
+}
+
 async function main(): Promise<void> {
   for (const status of orderStatuses) {
     await prisma.orderStatus.upsert({
@@ -475,6 +487,108 @@ async function main(): Promise<void> {
 
       productCount += 1;
     }
+  }
+
+  const halfChicken = await findProductByName('Halbes Hähnchen');
+  const largeFries = await findProductByName('Große Pommes');
+  const coleslaw = await findProductByName('Krautsalat');
+  const garlicSauce = await findProductByName('Knoblauchsauce');
+  const bbqSauce = await findProductByName('BBQ-Sauce');
+
+  const sideGroup = await prisma.productOptionGroup.upsert({
+    where: {
+      mainProductId_optionType: {
+        mainProductId: halfChicken.id,
+        optionType: 'SIDE',
+      },
+    },
+    update: {
+      name: 'Beilage',
+      minSelections: 0,
+      maxSelections: 1,
+      sortOrder: 1,
+    },
+    create: {
+      mainProductId: halfChicken.id,
+      name: 'Beilage',
+      optionType: 'SIDE',
+      minSelections: 0,
+      maxSelections: 1,
+      sortOrder: 1,
+    },
+  });
+
+  const sauceGroup = await prisma.productOptionGroup.upsert({
+    where: {
+      mainProductId_optionType: {
+        mainProductId: halfChicken.id,
+        optionType: 'SAUCE',
+      },
+    },
+    update: {
+      name: 'Sauce',
+      minSelections: 0,
+      maxSelections: 1,
+      sortOrder: 2,
+    },
+    create: {
+      mainProductId: halfChicken.id,
+      name: 'Sauce',
+      optionType: 'SAUCE',
+      minSelections: 0,
+      maxSelections: 1,
+      sortOrder: 2,
+    },
+  });
+
+  const productOptions = [
+    {
+      optionGroupId: sideGroup.id,
+      optionProductId: largeFries.id,
+      surcharge: 3.5,
+      sortOrder: 1,
+    },
+    {
+      optionGroupId: sideGroup.id,
+      optionProductId: coleslaw.id,
+      surcharge: 3,
+      sortOrder: 2,
+    },
+    {
+      optionGroupId: sauceGroup.id,
+      optionProductId: garlicSauce.id,
+      surcharge: 1,
+      sortOrder: 1,
+    },
+    {
+      optionGroupId: sauceGroup.id,
+      optionProductId: bbqSauce.id,
+      surcharge: 1,
+      sortOrder: 2,
+    },
+  ];
+
+  for (const productOption of productOptions) {
+    await prisma.productOption.upsert({
+      where: {
+        mainProductId_optionProductId: {
+          mainProductId: halfChicken.id,
+          optionProductId: productOption.optionProductId,
+        },
+      },
+      update: {
+        optionGroupId: productOption.optionGroupId,
+        surcharge: productOption.surcharge,
+        sortOrder: productOption.sortOrder,
+      },
+      create: {
+        mainProductId: halfChicken.id,
+        optionGroupId: productOption.optionGroupId,
+        optionProductId: productOption.optionProductId,
+        surcharge: productOption.surcharge,
+        sortOrder: productOption.sortOrder,
+      },
+    });
   }
 
   console.log(
