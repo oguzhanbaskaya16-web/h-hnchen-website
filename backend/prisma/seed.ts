@@ -98,6 +98,260 @@ const socialMediaLinks = [
   },
 ];
 
+const menuCategories = [
+  {
+    name: 'Hähnchen',
+    description: 'Frisch gegrillte Hähnchenspezialitäten.',
+    products: [
+      {
+        name: 'Halbes Hähnchen',
+        shortDescription: 'Saftig, knusprig und perfekt gewürzt.',
+        price: 7.5,
+        preparationTimeMinutes: 20,
+        isHighlight: true,
+      },
+      {
+        name: 'Ganzes Hähnchen',
+        shortDescription: 'Für den großen Hunger – frisch vom Grill.',
+        price: 13.9,
+        preparationTimeMinutes: 25,
+        isHighlight: true,
+      },
+      {
+        name: 'Hähnchen mit Pommes',
+        shortDescription: 'Halbes Hähnchen mit goldbraunen Pommes.',
+        price: 11.5,
+        preparationTimeMinutes: 25,
+        isHighlight: true,
+      },
+      {
+        name: 'Hähnchenflügel',
+        shortDescription: 'Knusprig gegrillte Hähnchenflügel mit Dip.',
+        price: 8.9,
+        preparationTimeMinutes: 20,
+        isHighlight: false,
+      },
+      {
+        name: 'Hähnchenstreifen',
+        shortDescription: 'Zarte Hähnchenstreifen mit einer Sauce nach Wahl.',
+        price: 8.5,
+        preparationTimeMinutes: 15,
+        isHighlight: false,
+      },
+    ],
+  },
+  {
+    name: 'Menüs & Angebote',
+    description: 'Kombinierte Angebote für eine oder mehrere Personen.',
+    products: [
+      {
+        name: 'Hähnchen-Menü',
+        shortDescription:
+          'Halbes Hähnchen mit Pommes, einer Sauce und einem Getränk.',
+        price: 13.9,
+        preparationTimeMinutes: 25,
+        isHighlight: true,
+      },
+      {
+        name: 'Ganzes-Hähnchen-Menü',
+        shortDescription:
+          'Ganzes Hähnchen mit großer Pommes, zwei Saucen und zwei Getränken.',
+        price: 21.9,
+        preparationTimeMinutes: 30,
+        isHighlight: false,
+      },
+      {
+        name: 'Familienangebot',
+        shortDescription:
+          '2 ganze Hähnchen, 2 große Pommes, 3 Saucen und 2 Getränke.',
+        price: 24.9,
+        preparationTimeMinutes: 35,
+        isHighlight: true,
+      },
+      {
+        name: 'Flügel-Menü',
+        shortDescription:
+          'Hähnchenflügel mit Pommes, einer Sauce und einem Getränk.',
+        price: 12.9,
+        preparationTimeMinutes: 25,
+        isHighlight: false,
+      },
+    ],
+  },
+  {
+    name: 'Beilagen',
+    description: 'Passende Beilagen zu unseren Grillgerichten.',
+    products: [
+      {
+        name: 'Kleine Pommes',
+        shortDescription: 'Kleine Portion knuspriger Pommes.',
+        price: 2.5,
+        preparationTimeMinutes: 10,
+        isHighlight: false,
+      },
+      {
+        name: 'Große Pommes',
+        shortDescription: 'Große Portion knuspriger, goldbrauner Pommes.',
+        price: 3.5,
+        preparationTimeMinutes: 10,
+        isHighlight: false,
+      },
+      {
+        name: 'Süßkartoffel-Pommes',
+        shortDescription: 'Knusprige Pommes aus Süßkartoffeln.',
+        price: 4.5,
+        preparationTimeMinutes: 12,
+        isHighlight: false,
+      },
+      {
+        name: 'Krautsalat',
+        shortDescription: 'Frischer, cremiger Krautsalat.',
+        price: 3,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Gemischter Salat',
+        shortDescription: 'Frischer Salat mit Tomaten, Gurken und Dressing.',
+        price: 4.5,
+        preparationTimeMinutes: 5,
+        isHighlight: false,
+      },
+      {
+        name: 'Fladenbrot',
+        shortDescription: 'Frisch aufgebackenes Fladenbrot.',
+        price: 2,
+        preparationTimeMinutes: 5,
+        isHighlight: false,
+      },
+    ],
+  },
+  {
+    name: 'Saucen',
+    description: 'Saucen für Hähnchen und Beilagen.',
+    products: [
+      {
+        name: 'Knoblauchsauce',
+        shortDescription: 'Cremig und würzig.',
+        price: 1,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Cocktailsauce',
+        shortDescription: 'Fruchtig und mild.',
+        price: 1,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'BBQ-Sauce',
+        shortDescription: 'Rauchig und herzhaft.',
+        price: 1,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Currysauce',
+        shortDescription: 'Fruchtig-würzige Sauce mit feiner Currynote.',
+        price: 1,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Scharfe Sauce',
+        shortDescription: 'Pikante Sauce für alle, die es schärfer mögen.',
+        price: 1,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+    ],
+  },
+  {
+    name: 'Getränke',
+    description: 'Erfrischende alkoholfreie Getränke.',
+    products: [
+      {
+        name: 'Coca-Cola',
+        shortDescription: 'Erfrischungsgetränk mit Koffein.',
+        price: 2.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Coca-Cola Zero',
+        shortDescription: 'Zuckerfreies Erfrischungsgetränk mit Koffein.',
+        price: 2.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Fanta',
+        shortDescription: 'Fruchtiges Orangen-Erfrischungsgetränk.',
+        price: 2.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Sprite',
+        shortDescription:
+          'Erfrischungsgetränk mit Zitronen-Limetten-Geschmack.',
+        price: 2.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Ayran',
+        shortDescription: 'Erfrischendes türkisches Joghurtgetränk.',
+        price: 2,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Mineralwasser',
+        shortDescription: 'Natürliches Mineralwasser.',
+        price: 2,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+    ],
+  },
+  {
+    name: 'Desserts',
+    description: 'Ein süßer Abschluss nach dem Essen.',
+    products: [
+      {
+        name: 'Baklava',
+        shortDescription: 'Süßes Blätterteiggebäck mit Nüssen und Zuckersirup.',
+        price: 3.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Milchreis',
+        shortDescription: 'Cremiger Milchreis mit Zimt.',
+        price: 3.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Schokoladenmuffin',
+        shortDescription: 'Saftiger Muffin mit Schokoladenstückchen.',
+        price: 2.9,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+      {
+        name: 'Kinder-Dessert',
+        shortDescription: 'Kleine süße Überraschung für Kinder.',
+        price: 2.5,
+        preparationTimeMinutes: 0,
+        isHighlight: false,
+      },
+    ],
+  },
+];
+
 async function main(): Promise<void> {
   for (const status of orderStatuses) {
     await prisma.orderStatus.upsert({
@@ -157,6 +411,76 @@ async function main(): Promise<void> {
       },
     });
   }
+
+  let categoryCount = 0;
+  let productCount = 0;
+
+  for (const categoryData of menuCategories) {
+    const existingCategory = await prisma.productCategory.findFirst({
+      where: {
+        name: categoryData.name,
+      },
+    });
+
+    const category = existingCategory
+      ? await prisma.productCategory.update({
+          where: {
+            id: existingCategory.id,
+          },
+          data: {
+            description: categoryData.description,
+          },
+        })
+      : await prisma.productCategory.create({
+          data: {
+            name: categoryData.name,
+            description: categoryData.description,
+          },
+        });
+
+    categoryCount += 1;
+
+    for (const productData of categoryData.products) {
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          categoryId: category.id,
+          name: productData.name,
+        },
+      });
+
+      const productValues = {
+        shortDescription: productData.shortDescription,
+        price: productData.price,
+        preparationTimeMinutes: productData.preparationTimeMinutes,
+        isHighlight: productData.isHighlight,
+        isAvailable: true,
+      };
+
+      if (existingProduct) {
+        await prisma.product.update({
+          where: {
+            id: existingProduct.id,
+          },
+          data: productValues,
+        });
+      } else {
+        await prisma.product.create({
+          data: {
+            categoryId: category.id,
+            name: productData.name,
+            ...productValues,
+          },
+        });
+      }
+
+      productCount += 1;
+    }
+  }
+
+  console.log(
+    `${categoryCount} Produktkategorien und ` +
+      `${productCount} Produkte wurden angelegt oder aktualisiert.`,
+  );
 
   console.log(
     `${orderStatuses.length} Bestellstatus, ` +
