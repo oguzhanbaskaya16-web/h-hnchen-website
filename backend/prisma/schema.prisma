@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,283 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+model Restaurant {
+  id               Int               @id @default(autoincrement()) @map("restaurant_id")
+  name             String            @db.VarChar(100)
+  street           String?           @map("strasse") @db.VarChar(100)
+  houseNumber      String?           @map("hausnummer") @db.VarChar(10)
+  postalCode       String?           @map("plz") @db.VarChar(10)
+  city             String?           @map("ort") @db.VarChar(100)
+  phone            String?           @map("telefon") @db.VarChar(30)
+  email            String?           @db.VarChar(100)
+  description      String?           @map("beschreibung") @db.Text
+  openingHours     OpeningHour[]
+  socialMediaLinks SocialMediaLink[]
+
+  @@map("restaurants")
+}
+
+model OpeningHour {
+  id           Int        @id @default(autoincrement()) @map("oeffnungszeit_id")
+  restaurantId Int        @map("restaurant_id")
+  weekday      String     @map("wochentag") @db.VarChar(15)
+  opensAt      DateTime   @map("oeffnet_um") @db.Time(0)
+  closesAt     DateTime   @map("schliesst_um") @db.Time(0)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("oeffnungszeiten")
+}
+
+model SocialMediaLink {
+  id           Int        @id @default(autoincrement()) @map("social_media_id")
+  restaurantId Int        @map("restaurant_id")
+  platform     String     @map("plattform") @db.VarChar(50)
+  url          String     @db.VarChar(255)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("social_media_links")
+}
+
+model ProductCategory {
+  id          Int       @id @default(autoincrement()) @map("kategorie_id")
+  name        String    @db.VarChar(100)
+  description String?   @map("beschreibung") @db.Text
+  products    Product[]
+
+  @@map("produktkategorien")
+}
+
+model Product {
+  id                     Int             @id @default(autoincrement()) @map("produkt_id")
+  categoryId             Int             @map("kategorie_id")
+  name                   String          @db.VarChar(150)
+  shortDescription       String?         @map("kurzbeschreibung") @db.VarChar(255)
+  description            String?         @map("beschreibung") @db.Text
+  price                  Decimal         @map("preis") @db.Decimal(10, 2)
+  image                  String?         @map("bild") @db.VarChar(255)
+  preparationTimeMinutes Int?            @map("zubereitungszeit_minuten")
+  allergenInformation    String?         @map("allergenhinweis") @db.Text
+  isHighlight            Boolean         @default(false) @map("ist_highlight")
+  isAvailable            Boolean         @default(true) @map("ist_verfuegbar")
+  category               ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  mainProductOptions ProductOption[] @relation("MainProductOptions")
+  usedAsOption       ProductOption[] @relation("OptionProductOptions")
+
+  recommendations        ProductRecommendation[] @relation("ProductRecommendations")
+  recommendedForProducts ProductRecommendation[] @relation("RecommendedProductRecommendations")
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("produkte")
+}
+
+model ProductOption {
+  id              Int     @id @default(autoincrement()) @map("produktoption_id")
+  mainProductId   Int     @map("hauptprodukt_id")
+  optionProductId Int     @map("optionsprodukt_id")
+  optionType      String  @map("optionstyp") @db.VarChar(30)
+  surcharge       Decimal @default(0.00) @map("aufpreis") @db.Decimal(10, 2)
+  allowMultiple   Boolean @default(false) @map("mehrfachauswahl")
+
+  mainProduct   Product @relation("MainProductOptions", fields: [mainProductId], references: [id], onDelete: Cascade)
+  optionProduct Product @relation("OptionProductOptions", fields: [optionProductId], references: [id], onDelete: Cascade)
+
+  orderItemOptions OrderItemOption[]
+
+  @@unique([mainProductId, optionProductId])
+  @@map("produktoptionen")
+}
+
+model ProductRecommendation {
+  id                   Int  @id @default(autoincrement()) @map("produktempfehlung_id")
+  productId            Int  @map("produkt_id")
+  recommendedProductId Int  @map("empfohlenes_produkt_id")
+  sortOrder            Int? @map("sortierreihenfolge")
+
+  product            Product @relation("ProductRecommendations", fields: [productId], references: [id], onDelete: Cascade)
+  recommendedProduct Product @relation("RecommendedProductRecommendations", fields: [recommendedProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, recommendedProductId])
+  @@map("produktempfehlungen")
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement()) @map("warenkorb_id")
+  sessionId String     @unique @map("sitzungskennung") @db.VarChar(255)
+  createdAt DateTime   @map("erstellt_am")
+  updatedAt DateTime   @map("aktualisiert_am")
+  status    String     @default("offen") @db.VarChar(30)
+  items     CartItem[]
+  orders    Order[]
+
+  @@map("warenkoerbe")
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement()) @map("warenkorbposition_id")
+  cartId    Int     @map("warenkorb_id")
+  productId Int     @map("produkt_id")
+  quantity  Int     @default(1) @map("menge")
+  unitPrice Decimal @map("einzelpreis") @db.Decimal(10, 2)
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("warenkorbpositionen")
+}
+
+model OrderStatus {
+  id             Int                  @id @default(autoincrement()) @map("bestellstatus_id")
+  name           String               @unique @db.VarChar(50)
+  description    String?              @map("beschreibung") @db.VarChar(255)
+  sortOrder      Int                  @map("sortierreihenfolge")
+  orders         Order[]
+  historyEntries OrderStatusHistory[]
+
+  @@map("bestellstatus")
+}
+
+model Order {
+  id             Int                  @id @default(autoincrement()) @map("bestellung_id")
+  cartId         Int?                 @map("warenkorb_id")
+  orderStatusId  Int                  @map("bestellstatus_id")
+  orderNumber    String               @unique @map("bestellnummer") @db.VarChar(30)
+  orderType      String               @map("bestellart") @db.VarChar(20)
+  orderedAt      DateTime             @map("bestellt_am")
+  requestedTime  DateTime             @map("gewuenschter_zeitpunkt")
+  subtotal       Decimal              @map("warenwert") @db.Decimal(10, 2)
+  deliveryFee    Decimal              @default(0.00) @map("liefergebuehr") @db.Decimal(10, 2)
+  discountAmount Decimal              @default(0.00) @map("rabattbetrag") @db.Decimal(10, 2)
+  totalAmount    Decimal              @map("gesamtbetrag") @db.Decimal(10, 2)
+  note           String?              @map("anmerkung") @db.Text
+  cart           Cart?                @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  orderStatus    OrderStatus          @relation(fields: [orderStatusId], references: [id], onDelete: Restrict)
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  payments       Payment[]
+  customer       OrderCustomer?
+  address        OrderAddress?
+  notifications  Notification[]
+
+  @@map("bestellungen")
+}
+
+model OrderItem {
+  id          Int     @id @default(autoincrement()) @map("bestellposition_id")
+  orderId     Int     @map("bestellung_id")
+  productId   Int?    @map("produkt_id")
+  productName String  @map("produktname") @db.VarChar(150)
+  quantity    Int     @map("menge")
+  unitPrice   Decimal @map("einzelpreis") @db.Decimal(10, 2)
+
+  order   Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  options OrderItemOption[]
+
+  @@map("bestellpositionen")
+}
+
+model OrderItemOption {
+  id              Int     @id @default(autoincrement()) @map("bestellpositionsoption_id")
+  orderItemId     Int     @map("bestellposition_id")
+  productOptionId Int     @map("produktoption_id")
+  optionName      String  @map("optionsname") @db.VarChar(150)
+  surcharge       Decimal @map("aufpreis") @db.Decimal(10, 2)
+
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  productOption ProductOption @relation(fields: [productOptionId], references: [id], onDelete: Restrict)
+
+  @@map("bestellpositionsoptionen")
+}
+
+model OrderStatusHistory {
+  id            Int      @id @default(autoincrement()) @map("statusverlauf_id")
+  orderId       Int      @map("bestellung_id")
+  orderStatusId Int      @map("bestellstatus_id")
+  changedAt     DateTime @map("geaendert_am")
+  note          String?  @map("bemerkung") @db.VarChar(255)
+
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderStatus OrderStatus @relation(fields: [orderStatusId], references: [id], onDelete: Restrict)
+
+  @@map("bestellstatusverlauf")
+}
+
+model PaymentMethod {
+  id              Int       @id @default(autoincrement()) @map("zahlungsart_id")
+  name            String    @unique @db.VarChar(50)
+  isOnlinePayment Boolean   @default(false) @map("ist_onlinezahlung")
+  isActive        Boolean   @default(true) @map("ist_aktiv")
+  payments        Payment[]
+
+  @@map("zahlungsart")
+}
+
+model Payment {
+  id                   Int       @id @default(autoincrement()) @map("zahlung_id")
+  orderId              Int       @map("bestellung_id")
+  paymentMethodId      Int       @map("zahlungsart_id")
+  amount               Decimal   @map("betrag") @db.Decimal(10, 2)
+  paymentStatus        String    @map("zahlungsstatus") @db.VarChar(30)
+  createdAt            DateTime  @map("erstellt_am")
+  paidAt               DateTime? @map("bezahlt_am")
+  transactionReference String?   @map("transaktionsreferenz") @db.VarChar(255)
+
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@map("zahlungen")
+}
+
+model OrderCustomer {
+  id        Int    @id @default(autoincrement()) @map("bestellkunde_id")
+  orderId   Int    @unique @map("bestellung_id")
+  firstName String @map("vorname") @db.VarChar(100)
+  lastName  String @map("nachname") @db.VarChar(100)
+  phone     String @map("telefon") @db.VarChar(30)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("bestellkunde")
+}
+
+model OrderAddress {
+  id          Int    @id @default(autoincrement()) @map("bestelladresse_id")
+  orderId     Int    @unique @map("bestellung_id")
+  street      String @map("strasse") @db.VarChar(100)
+  houseNumber String @map("hausnummer") @db.VarChar(20)
+  postalCode  String @map("plz") @db.VarChar(10)
+  city        String @map("ort") @db.VarChar(100)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("bestelladresse")
+}
+
+model Notification {
+  id               Int       @id @default(autoincrement()) @map("benachrichtigung_id")
+  orderId          Int       @map("bestellung_id")
+  channel          String    @map("kanal") @db.VarChar(30)
+  notificationType String    @map("nachrichtentyp") @db.VarChar(50)
+  sentAt           DateTime? @map("gesendet_am")
+  status           String    @db.VarChar(30)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("benachrichtigungen")
+}
+
+model ContactRequest {
+  id               Int      @id @default(autoincrement()) @map("kontaktanfrage_id")
+  name             String   @db.VarChar(150)
+  email            String   @db.VarChar(150)
+  message          String   @map("nachricht") @db.Text
+  receivedAt       DateTime @map("eingegangen_am")
+  processingStatus String   @default("offen") @map("bearbeitungsstatus") @db.VarChar(30)
+
+  @@map("kontaktanfrage")
 }
