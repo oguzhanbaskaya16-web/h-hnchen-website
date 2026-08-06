@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -13,6 +13,14 @@ describe('HealthController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
 
     app.setGlobalPrefix('api/v1');
 
@@ -120,6 +128,94 @@ describe('HealthController (e2e)', () => {
     expect(Number.isNaN(Date.parse(response.body.updatedAt))).toBe(false);
 
     expect(response.body).not.toHaveProperty('id');
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) fügt ein Produkt hinzu', async () => {
+    const menuResponse = await request(app.getHttpServer())
+      .get('/api/v1/menu')
+      .expect(200);
+    const product = menuResponse.body.categories[0].products[0];
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({ productId: product.id, quantity: 2 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      sessionId: cartResponse.body.sessionId,
+      status: 'offen',
+      items: [
+        {
+          productId: product.id,
+          name: product.name,
+          quantity: 2,
+          unitPrice: product.price,
+          lineTotal: product.price * 2,
+        },
+      ],
+      total: product.price * 2,
+    });
+
+    expect(response.body).not.toHaveProperty('id');
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) erhöht vorhandene Menge', async () => {
+    const menuResponse = await request(app.getHttpServer())
+      .get('/api/v1/menu')
+      .expect(200);
+    const product = menuResponse.body.categories[0].products[0];
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const url = `/api/v1/carts/${cartResponse.body.sessionId}/items`;
+
+    await request(app.getHttpServer())
+      .post(url)
+      .send({ productId: product.id, quantity: 1 })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(url)
+      .send({ productId: product.id, quantity: 2 })
+      .expect(201);
+
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].quantity).toBe(3);
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) lehnt ungültige Mengen ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({ productId: 1, quantity: 0 })
+      .expect(400);
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) behandelt unbekannte Warenkörbe', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/carts/unbekannt/items')
+      .send({ productId: 1, quantity: 1 })
+      .expect(404);
+  });
+
+  it('/api/v1/carts/:cartId/items (POST) lehnt unbekannte Produkte ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({ productId: 2147483647, quantity: 1 })
+      .expect(404);
   });
 
   afterAll(async () => {
