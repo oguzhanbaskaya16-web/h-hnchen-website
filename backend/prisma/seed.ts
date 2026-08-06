@@ -1,11 +1,11 @@
-import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../src/generated/prisma/client";
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../src/generated/prisma/client';
 
-const connectionString = process.env["DATABASE_URL"];
+const connectionString = process.env['DATABASE_URL'];
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL ist nicht gesetzt.");
+  throw new Error('DATABASE_URL ist nicht gesetzt.');
 }
 
 const adapter = new PrismaPg({ connectionString });
@@ -13,88 +13,88 @@ const prisma = new PrismaClient({ adapter });
 
 const orderStatuses = [
   {
-    name: "Eingegangen",
-    description: "Die Bestellung ist eingegangen.",
+    name: 'Eingegangen',
+    description: 'Die Bestellung ist eingegangen.',
     sortOrder: 1,
   },
   {
-    name: "Bestätigt",
-    description: "Die Bestellung wurde bestätigt.",
+    name: 'Bestätigt',
+    description: 'Die Bestellung wurde bestätigt.',
     sortOrder: 2,
   },
   {
-    name: "In Zubereitung",
-    description: "Die Bestellung wird zubereitet.",
+    name: 'In Zubereitung',
+    description: 'Die Bestellung wird zubereitet.',
     sortOrder: 3,
   },
   {
-    name: "Bereit",
-    description: "Die Bestellung ist zur Abholung oder Auslieferung bereit.",
+    name: 'Bereit',
+    description: 'Die Bestellung ist zur Abholung oder Auslieferung bereit.',
     sortOrder: 4,
   },
   {
-    name: "Abgeschlossen",
-    description: "Die Bestellung wurde abgeschlossen.",
+    name: 'Abgeschlossen',
+    description: 'Die Bestellung wurde abgeschlossen.',
     sortOrder: 5,
   },
   {
-    name: "Storniert",
-    description: "Die Bestellung wurde storniert.",
+    name: 'Storniert',
+    description: 'Die Bestellung wurde storniert.',
     sortOrder: 6,
   },
 ];
 
 const paymentMethods = [
   {
-    name: "Barzahlung",
+    name: 'Barzahlung',
     isOnlinePayment: false,
     isActive: true,
   },
   {
-    name: "PayPal",
+    name: 'PayPal',
     isOnlinePayment: true,
     isActive: true,
   },
   {
-    name: "Kreditkarte",
+    name: 'Kreditkarte',
     isOnlinePayment: true,
     isActive: true,
   },
 ];
 
 const restaurantData = {
-  name: "IDIL Hähnchengrill",
-  street: "Musterstraße",
-  houseNumber: "1",
-  postalCode: "12345",
-  city: "Musterstadt",
-  phone: "+49 123 4567890",
-  email: "info@idil-haehnchengrill.example",
-  description: "Frisch gegrillte Hähnchenspezialitäten zur Abholung.",
+  name: 'IDIL Hähnchengrill',
+  street: 'Musterstraße',
+  houseNumber: '1',
+  postalCode: '12345',
+  city: 'Musterstadt',
+  phone: '+49 123 4567890',
+  email: 'info@idil-haehnchengrill.example',
+  description: 'Frisch gegrillte Hähnchenspezialitäten zur Abholung.',
 };
 
 const weekdays = [
-  "MONDAY",
-  "TUESDAY",
-  "WEDNESDAY",
-  "THURSDAY",
-  "FRIDAY",
-  "SATURDAY",
-  "SUNDAY",
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
 ];
 
 const socialMediaLinks = [
   {
-    platform: "INSTAGRAM",
-    url: "https://example.com/instagram",
+    platform: 'INSTAGRAM',
+    url: 'https://example.com/instagram',
   },
   {
-    platform: "FACEBOOK",
-    url: "https://example.com/facebook",
+    platform: 'FACEBOOK',
+    url: 'https://example.com/facebook',
   },
   {
-    platform: "TIKTOK",
-    url: "https://example.com/tiktok",
+    platform: 'TIKTOK',
+    url: 'https://example.com/tiktok',
   },
 ];
 
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
     });
   }
 
-    const existingRestaurant = await prisma.restaurant.findFirst({
+  const existingRestaurant = await prisma.restaurant.findFirst({
     where: {
       name: restaurantData.name,
     },
@@ -123,8 +123,8 @@ async function main(): Promise<void> {
 
   const openingHours = weekdays.map((weekday) => ({
     weekday,
-    opensAt: new Date("1970-01-01T00:00:00.000Z"),
-    closesAt: new Date("1970-01-01T23:59:00.000Z"),
+    opensAt: new Date('1970-01-01T00:00:00.000Z'),
+    closesAt: new Date('1970-01-01T23:59:00.000Z'),
   }));
 
   if (existingRestaurant) {
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
 
 main()
   .catch((error: unknown) => {
-    console.error("Prisma-Seed fehlgeschlagen:", error);
+    console.error('Prisma-Seed fehlgeschlagen:', error);
     process.exitCode = 1;
   })
   .finally(async () => {
