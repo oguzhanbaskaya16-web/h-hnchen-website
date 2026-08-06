@@ -1,3 +1,4 @@
 backend/src/generated/
 .env
 backend/.env
+backend/dist/
