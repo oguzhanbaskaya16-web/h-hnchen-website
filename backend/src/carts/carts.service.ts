@@ -27,7 +27,7 @@ export class CartsService {
       createdAt: cart.createdAt,
       updatedAt: cart.updatedAt,
       items: [],
-      total: 0,
+      total: '0.00',
     };
   }
 
@@ -420,6 +420,28 @@ export class CartsService {
 
     return this.findPublicCart(sessionId);
   }
+  async clear(sessionId: string) {
+    const cart = await this.prisma.cart.findUnique({
+      where: { sessionId },
+    });
+
+    if (!cart) {
+      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+    }
+
+    if (cart.status !== 'offen') {
+      throw new ConflictException(
+        'Nur ein offener Warenkorb kann geleert werden.',
+      );
+    }
+
+    await this.prisma.cartItem.deleteMany({
+      where: { cartId: cart.id },
+    });
+
+    return this.findPublicCart(sessionId);
+  }
+
   async removeItem(sessionId: string, itemIdValue: string) {
     const itemId = Number(itemIdValue);
 
@@ -465,8 +487,8 @@ export class CartsService {
     return this.findPublicCart(sessionId);
   }
 
-  private async findPublicCart(sessionId: string) {
-    const cart = await this.prisma.cart.findUniqueOrThrow({
+  async findPublicCart(sessionId: string) {
+    const cart = await this.prisma.cart.findUnique({
       where: {
         sessionId,
       },
@@ -493,6 +515,10 @@ export class CartsService {
         },
       },
     });
+
+    if (!cart) {
+      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+    }
 
     const items = cart.items.map((item) => {
       const optionSurcharge = item.options.reduce(
