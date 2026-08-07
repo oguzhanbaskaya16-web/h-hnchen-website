@@ -167,11 +167,46 @@ describe('HealthController (e2e)', () => {
 
         expect(chickenCategory.products[0]).toMatchObject({
           name: 'Halbes Hähnchen',
-          price: 7.5,
+          price: '7.50',
           isHighlight: true,
         });
 
-        expect(typeof chickenCategory.products[0].price).toBe('number');
+        expect(typeof chickenCategory.products[0].price).toBe('string');
+        expect(chickenCategory.products[0].price).toMatch(/^\d+\.\d{2}$/);
+
+        const productWithOptions = products.find(
+          (product: { optionGroups?: unknown[] }) =>
+            Array.isArray(product.optionGroups) &&
+            product.optionGroups.length > 0,
+        );
+
+        expect(productWithOptions).toBeDefined();
+
+        const optionGroup = productWithOptions.optionGroups[0];
+
+        expect(optionGroup).toMatchObject({
+          id: expect.any(Number),
+          name: expect.any(String),
+          optionType: expect.any(String),
+          minSelections: expect.any(Number),
+          maxSelections: expect.any(Number),
+        });
+
+        expect(optionGroup.options.length).toBeGreaterThan(0);
+        expect(optionGroup.maxSelections).toBeGreaterThanOrEqual(
+          optionGroup.minSelections,
+        );
+
+        const option = optionGroup.options[0];
+
+        expect(option).toMatchObject({
+          id: expect.any(Number),
+          productId: expect.any(Number),
+          name: expect.any(String),
+          surcharge: expect.any(String),
+        });
+
+        expect(option.surcharge).toMatch(/^\d+\.\d{2}$/);
 
         expect(chickenCategory.products[0]).not.toHaveProperty('categoryId');
         expect(chickenCategory.products[0]).not.toHaveProperty('isAvailable');
@@ -703,7 +738,7 @@ describe('HealthController (e2e)', () => {
     expect(response.body).toMatchObject({
       status: 'offen',
       items: [],
-      total: 0,
+      total: '0.00',
     });
 
     expect(response.body.sessionId).toMatch(
@@ -1204,6 +1239,104 @@ describe('HealthController (e2e)', () => {
     });
 
     expect(Array.isArray(response.body.message)).toBe(true);
+  });
+
+  it('/api/v1/carts/:cartId (GET) ruft einen vorhandenen Warenkorb ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/carts/${cartResponse.body.sessionId}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sessionId: cartResponse.body.sessionId,
+      status: 'offen',
+      items: [],
+      total: '0.00',
+    });
+
+    expect(response.body).not.toHaveProperty('id');
+  });
+
+  it('/api/v1/carts/:cartId (GET) behandelt unbekannte Warenkörbe', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/carts/unbekannt')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Warenkorb wurde nicht gefunden.',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items (DELETE) leert einen gefüllten Warenkorb', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sessionId: cartResponse.body.sessionId,
+      status: 'offen',
+      items: [],
+      total: '0.00',
+    });
+
+    const remainingItems = await prisma.cartItem.count({
+      where: {
+        cart: {
+          sessionId: cartResponse.body.sessionId,
+        },
+      },
+    });
+
+    expect(remainingItems).toBe(0);
+  });
+
+  it('/api/v1/carts/:cartId/items (DELETE) kann einen leeren Warenkorb erneut leeren', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sessionId: cartResponse.body.sessionId,
+      status: 'offen',
+      items: [],
+      total: '0.00',
+    });
+  });
+
+  it('/api/v1/carts/:cartId/items (DELETE) behandelt unbekannte Warenkörbe', async () => {
+    const response = await request(app.getHttpServer())
+      .delete('/api/v1/carts/unbekannt/items')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Warenkorb wurde nicht gefunden.',
+    });
   });
 
   afterAll(async () => {
