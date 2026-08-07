@@ -12,6 +12,8 @@ import { PrismaClient } from '../src/generated/prisma/client';
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaClient;
+  let orderCartId: string;
+  let orderNumber: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -1336,6 +1338,279 @@ describe('HealthController (e2e)', () => {
       statusCode: 404,
       error: 'Not Found',
       message: 'Warenkorb wurde nicht gefunden.',
+    });
+  });
+
+  it('/api/v1/orders bereitet einen gefüllten Warenkorb vor', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    orderCartId = cartResponse.body.sessionId;
+
+    expect(orderCartId).toEqual(expect.any(String));
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${orderCartId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 2,
+        optionIds,
+      })
+      .expect(201);
+
+    expect(addResponse.body.items).toHaveLength(1);
+    expect(addResponse.body.items[0]).toMatchObject({
+      product: {
+        id: product.id,
+        name: product.name,
+      },
+      quantity: 2,
+    });
+  });
+
+  it('/api/v1/orders (POST) erstellt eine Abholbestellung', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: orderCartId,
+        customer: {
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          phone: '+49 170 1234567',
+        },
+        note: 'Bitte gut durchgrillen.',
+      })
+      .expect(201);
+
+    orderNumber = response.body.orderNumber;
+
+    expect(orderNumber).toMatch(/^IDIL-\d{8}-[0-9A-F]{8}$/);
+
+    expect(response.body).toMatchObject({
+      orderNumber,
+      orderType: 'ABHOLUNG',
+      status: 'Eingegangen',
+      customer: {
+        firstName: 'Max',
+        lastName: 'Mustermann',
+        phone: '+49 170 1234567',
+      },
+      note: 'Bitte gut durchgrillen.',
+      deliveryFee: '0.00',
+      discountAmount: '0.00',
+    });
+
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].quantity).toBe(2);
+    expect(response.body.subtotal).toMatch(/^\d+\.\d{2}$/);
+    expect(response.body.totalAmount).toBe(response.body.subtotal);
+    expect(Number.isNaN(Date.parse(response.body.orderedAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(response.body.requestedTime))).toBe(false);
+
+    const storedCart = await prisma.cart.findUniqueOrThrow({
+      where: {
+        sessionId: orderCartId,
+      },
+    });
+
+    expect(storedCart.status).toBe('bestellt');
+  });
+
+  it('/api/v1/orders/:orderNumber (GET) ruft die Bestellbestätigung ab', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${orderNumber}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      orderNumber,
+      orderType: 'ABHOLUNG',
+      status: 'Eingegangen',
+      customer: {
+        firstName: 'Max',
+        lastName: 'Mustermann',
+        phone: '+49 170 1234567',
+      },
+      note: 'Bitte gut durchgrillen.',
+      deliveryFee: '0.00',
+      discountAmount: '0.00',
+    });
+
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.totalAmount).toBe(response.body.subtotal);
+  });
+
+  it('/api/v1/orders (POST) verhindert eine doppelte Bestellung', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: orderCartId,
+        customer: {
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          phone: '+49 170 1234567',
+        },
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      statusCode: 409,
+      error: 'Conflict',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt einen leeren Warenkorb ab', async () => {
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: cartResponse.body.sessionId,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message:
+        'Aus einem leeren Warenkorb kann keine Bestellung erstellt werden.',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt unbekannte Warenkörbe ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Warenkorb wurde nicht gefunden.',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt ungültige Kundendaten ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: '',
+          lastName: '',
+          phone: 'abc',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(Array.isArray(response.body.message)).toBe(true);
+  });
+
+  it('/api/v1/orders (POST) lehnt Lieferdaten im Abhol-MVP ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+        deliveryAddress: {
+          street: 'Musterstraße',
+          houseNumber: '1',
+          postalCode: '12345',
+          city: 'Musterstadt',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(response.body.message).toEqual(
+      expect.arrayContaining(['property deliveryAddress should not exist']),
+    );
+  });
+
+  it('/api/v1/orders (POST) lehnt einen vergangenen Abholzeitpunkt ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+        requestedTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message:
+        'Der gewünschte Abholzeitpunkt darf nicht in der Vergangenheit liegen.',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt einen zu weit entfernten Abholzeitpunkt ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+        requestedTime: new Date(
+          Date.now() + 15 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message:
+        'Der gewünschte Abholzeitpunkt darf höchstens 14 Tage in der Zukunft liegen.',
+    });
+  });
+
+  it('/api/v1/orders/:orderNumber (GET) behandelt unbekannte Bestellungen', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/orders/IDIL-20990101-UNBEKANNT')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Bestellung wurde nicht gefunden.',
     });
   });
 
