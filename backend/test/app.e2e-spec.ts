@@ -1206,6 +1206,58 @@ describe('HealthController (e2e)', () => {
     expect(Array.isArray(response.body.message)).toBe(true);
   });
 
+  it('/api/v1/carts/:cartId (GET) lädt einen bestehenden Warenkorb', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/carts/${created.body.sessionId}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sessionId: created.body.sessionId,
+      status: 'offen',
+      items: [],
+      total: '0.00',
+    });
+  });
+
+  it('/api/v1/carts/:cartId (GET) behandelt unbekannte Warenkörbe', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/carts/nicht-vorhanden')
+      .expect(404);
+  });
+
+  it('/api/v1/carts/:cartId/items (DELETE) leert den Warenkorb', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/carts/${created.body.sessionId}/items`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      items: [],
+      total: '0.00',
+    });
+  });
+
+  it('/api/v1/menu (GET) liefert Geldbeträge und Optionen frontend-sicher', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/menu')
+      .expect(200);
+
+    const products = response.body.categories.flatMap(
+      (category: { products: unknown[] }) => category.products,
+    );
+
+    expect(products.length).toBeGreaterThan(0);
+    expect(products[0].price).toMatch(/^\\d+\\.\\d{2}$/);
+    expect(Array.isArray(products[0].optionGroups)).toBe(true);
+  });
+
   afterAll(async () => {
     await app.close();
     await prisma.$disconnect();
