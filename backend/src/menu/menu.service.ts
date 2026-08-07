@@ -18,6 +18,20 @@ export class MenuService {
           orderBy: {
             id: 'asc',
           },
+          include: {
+            optionGroups: {
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: {
+                    optionProduct: { isAvailable: true },
+                  },
+                  orderBy: { sortOrder: 'asc' },
+                  include: { optionProduct: true },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -32,11 +46,24 @@ export class MenuService {
           name: product.name,
           shortDescription: product.shortDescription,
           description: product.description,
-          price: Number(product.price),
+          price: product.price.toFixed(2),
           image: product.image,
           preparationTimeMinutes: product.preparationTimeMinutes,
           allergenInformation: product.allergenInformation,
           isHighlight: product.isHighlight,
+          optionGroups: product.optionGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            type: group.optionType,
+            minSelections: group.minSelections,
+            maxSelections: group.maxSelections,
+            options: group.options.map((option) => ({
+              id: option.id,
+              productId: option.optionProduct.id,
+              name: option.optionProduct.name,
+              surcharge: option.surcharge.toFixed(2),
+            })),
+          })),
         })),
       })),
     };
