@@ -14,6 +14,7 @@ describe('HealthController (e2e)', () => {
   let prisma: PrismaClient;
   let orderCartId: string;
   let orderNumber: string;
+  let paymentMethodId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -28,6 +29,17 @@ describe('HealthController (e2e)', () => {
 
     const adapter = new PrismaPg({ connectionString });
     prisma = new PrismaClient({ adapter });
+
+    const paymentMethod = await prisma.paymentMethod.findFirstOrThrow({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    });
+
+    paymentMethodId = paymentMethod.id;
 
     app = moduleFixture.createNestApplication();
 
@@ -1376,6 +1388,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: orderCartId,
+        paymentMethodId,
         customer: {
           firstName: 'Max',
           lastName: 'Mustermann',
@@ -1447,6 +1460,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: orderCartId,
+        paymentMethodId,
         customer: {
           firstName: 'Max',
           lastName: 'Mustermann',
@@ -1470,6 +1484,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: cartResponse.body.sessionId,
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1491,6 +1506,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: crypto.randomUUID(),
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1511,6 +1527,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: crypto.randomUUID(),
+        paymentMethodId,
         customer: {
           firstName: '',
           lastName: '',
@@ -1532,6 +1549,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: crypto.randomUUID(),
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1561,6 +1579,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: crypto.randomUUID(),
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1583,6 +1602,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: crypto.randomUUID(),
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1644,6 +1664,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -1716,6 +1737,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -1782,6 +1804,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -1852,6 +1875,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -1927,6 +1951,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -1992,6 +2017,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2037,6 +2063,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/orders')
       .send({
         cartId: cartResponse.body.sessionId,
+        paymentMethodId,
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -2096,6 +2123,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2168,6 +2196,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2277,6 +2306,7 @@ describe('HealthController (e2e)', () => {
         .post('/api/v1/orders')
         .send({
           cartId: cartResponse.body.sessionId,
+          paymentMethodId,
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2325,6 +2355,7 @@ describe('HealthController (e2e)', () => {
 
     const orderData = {
       cartId: cartResponse.body.sessionId,
+      paymentMethodId,
       customer: {
         firstName: 'Erika',
         lastName: 'Musterfrau',
@@ -2356,6 +2387,185 @@ describe('HealthController (e2e)', () => {
     });
 
     expect(storedOrders).toBe(1);
+  });
+
+  it('/api/v1/orders (POST) verlangt eine Zahlungsart', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt eine unbekannte Zahlungsart ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: cartResponse.body.sessionId,
+        paymentMethodId: 2147483647,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'Die ausgewählte Zahlungsart ist nicht verfügbar.',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt eine deaktivierte Zahlungsart ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const inactivePaymentMethod = await prisma.paymentMethod.create({
+      data: {
+        name: `E2E inaktiv ${Date.now()}`,
+        isOnlinePayment: false,
+        isActive: false,
+      },
+    });
+
+    try {
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+        .send({
+          productId: product.id,
+          quantity: 1,
+          optionIds,
+        })
+        .expect(201);
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          paymentMethodId: inactivePaymentMethod.id,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Die ausgewählte Zahlungsart ist nicht verfügbar.',
+      });
+    } finally {
+      await prisma.paymentMethod.delete({
+        where: {
+          id: inactivePaymentMethod.id,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) speichert und liefert die Zahlung', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const paymentMethod = await prisma.paymentMethod.findUniqueOrThrow({
+      where: {
+        id: paymentMethodId,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const cartWithItemResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: cartResponse.body.sessionId,
+        paymentMethodId,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(201);
+
+    expect(response.body.payments).toHaveLength(1);
+
+    expect(response.body.payments[0]).toMatchObject({
+      id: expect.any(Number),
+      method: {
+        id: paymentMethod.id,
+        name: paymentMethod.name,
+        isOnlinePayment: paymentMethod.isOnlinePayment,
+      },
+      amount: cartWithItemResponse.body.total,
+      status: 'AUSSTEHEND',
+      createdAt: expect.any(String),
+      paidAt: null,
+    });
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: {
+        orderNumber: response.body.orderNumber,
+      },
+      include: {
+        payments: true,
+      },
+    });
+
+    expect(storedOrder.payments).toHaveLength(1);
+
+    expect(storedOrder.payments[0]).toMatchObject({
+      paymentMethodId,
+      paymentStatus: 'AUSSTEHEND',
+      paidAt: null,
+    });
+
+    expect(storedOrder.payments[0].amount.toFixed(2)).toBe(
+      cartWithItemResponse.body.total,
+    );
   });
 
   afterAll(async () => {

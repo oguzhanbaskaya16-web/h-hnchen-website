@@ -8,6 +8,8 @@ import {
   Matches,
   MaxLength,
   ValidateNested,
+  IsInt,
+  Min,
 } from 'class-validator';
 
 export class OrderCustomerDto {
@@ -37,6 +39,10 @@ export class CreateOrderDto {
   @IsNotEmpty()
   @MaxLength(255)
   cartId: string;
+
+  @IsInt()
+  @Min(1)
+  paymentMethodId: number;
 
   @ValidateNested()
   @Type(() => OrderCustomerDto)

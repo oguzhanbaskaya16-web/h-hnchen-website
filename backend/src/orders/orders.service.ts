@@ -292,6 +292,18 @@ export class OrdersService {
         );
       }
 
+      const paymentMethod = await transaction.paymentMethod.findUnique({
+        where: {
+          id: createOrderDto.paymentMethodId,
+        },
+      });
+
+      if (!paymentMethod || !paymentMethod.isActive) {
+        throw new BadRequestException(
+          'Die ausgewählte Zahlungsart ist nicht verfügbar.',
+        );
+      }
+
       const subtotal = cart.items.reduce((cartTotal, item) => {
         const optionSurcharge = item.options.reduce(
           (optionTotal, option) => optionTotal.plus(option.surcharge),
@@ -362,6 +374,14 @@ export class OrdersService {
               note: 'Bestellung wurde erstellt.',
             },
           },
+          payments: {
+            create: {
+              paymentMethodId: paymentMethod.id,
+              amount: subtotal,
+              paymentStatus: 'AUSSTEHEND',
+              createdAt: now,
+            },
+          },
         },
       });
 
@@ -381,6 +401,14 @@ export class OrdersService {
       include: {
         orderStatus: true,
         customer: true,
+        payments: {
+          orderBy: {
+            id: 'asc',
+          },
+          include: {
+            paymentMethod: true,
+          },
+        },
         items: {
           orderBy: {
             id: 'asc',
@@ -414,6 +442,18 @@ export class OrdersService {
           }
         : null,
       note: order.note,
+      payments: order.payments.map((payment) => ({
+        id: payment.id,
+        method: {
+          id: payment.paymentMethod.id,
+          name: payment.paymentMethod.name,
+          isOnlinePayment: payment.paymentMethod.isOnlinePayment,
+        },
+        amount: payment.amount.toFixed(2),
+        status: payment.paymentStatus,
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+      })),
       items: order.items.map((item) => {
         const optionSurcharge = item.options.reduce(
           (total, option) => total.plus(option.surcharge),
