@@ -1614,6 +1614,750 @@ describe('HealthController (e2e)', () => {
     });
   });
 
+  it('/api/v1/orders (POST) lehnt ein zwischenzeitlich deaktiviertes Produkt ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.product.update({
+      where: {
+        id: product.id,
+      },
+      data: {
+        isAvailable: false,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `Das Produkt „${product.name}“ ist nicht mehr verfügbar. Bitte aktualisiere deinen Warenkorb.`,
+      });
+
+      const storedCart = await prisma.cart.findUniqueOrThrow({
+        where: {
+          sessionId: cartResponse.body.sessionId,
+        },
+      });
+
+      expect(storedCart.status).toBe('offen');
+    } finally {
+      await prisma.product.update({
+        where: {
+          id: product.id,
+        },
+        data: {
+          isAvailable: true,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine zwischenzeitlich deaktivierte Option ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const selectedOption = await prisma.productOption.findUniqueOrThrow({
+      where: {
+        id: optionIds[0],
+      },
+      include: {
+        optionProduct: true,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.product.update({
+      where: {
+        id: selectedOption.optionProductId,
+      },
+      data: {
+        isAvailable: false,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `Die Option „${selectedOption.optionProduct.name}“ ist nicht mehr verfügbar. Bitte aktualisiere deinen Warenkorb.`,
+      });
+    } finally {
+      await prisma.product.update({
+        where: {
+          id: selectedOption.optionProductId,
+        },
+        data: {
+          isAvailable: true,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine nicht mehr zum Produkt gehörende Option ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const otherProduct = await prisma.product.findFirstOrThrow({
+      where: {
+        id: {
+          not: product.id,
+        },
+        isAvailable: true,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const cartItemId = addResponse.body.items[0].itemId;
+
+    await prisma.cartItem.update({
+      where: {
+        id: cartItemId,
+      },
+      data: {
+        productId: otherProduct.id,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+      });
+
+      expect(response.body.message).toContain(
+        `gehört nicht mehr zum Produkt „${otherProduct.name}“`,
+      );
+    } finally {
+      await prisma.cartItem.update({
+        where: {
+          id: cartItemId,
+        },
+        data: {
+          productId: product.id,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine unterschrittene Mindestauswahl ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const selectedOption = await prisma.productOption.findUniqueOrThrow({
+      where: {
+        id: optionIds[0],
+      },
+      include: {
+        optionGroup: true,
+      },
+    });
+
+    const group = selectedOption.optionGroup;
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.productOptionGroup.update({
+      where: {
+        id: group.id,
+      },
+      data: {
+        minSelections: 2,
+        maxSelections: Math.max(group.maxSelections, 2),
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+      });
+
+      expect(response.body.message).toContain(
+        `Für die Optionsgruppe „${group.name}“`,
+      );
+
+      expect(response.body.message).toContain(
+        'müssen mindestens 2 Optionen ausgewählt werden',
+      );
+    } finally {
+      await prisma.productOptionGroup.update({
+        where: {
+          id: group.id,
+        },
+        data: {
+          minSelections: group.minSelections,
+          maxSelections: group.maxSelections,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine überschrittene Maximalauswahl ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const selectedOption = await prisma.productOption.findUniqueOrThrow({
+      where: {
+        id: optionIds[0],
+      },
+      include: {
+        optionGroup: true,
+      },
+    });
+
+    const group = selectedOption.optionGroup;
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.productOptionGroup.update({
+      where: {
+        id: group.id,
+      },
+      data: {
+        minSelections: 0,
+        maxSelections: 0,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+      });
+
+      expect(response.body.message).toContain(
+        `Für die Optionsgruppe „${group.name}“`,
+      );
+
+      expect(response.body.message).toContain(
+        'dürfen höchstens 0 Optionen ausgewählt werden',
+      );
+    } finally {
+      await prisma.productOptionGroup.update({
+        where: {
+          id: group.id,
+        },
+        data: {
+          minSelections: group.minSelections,
+          maxSelections: group.maxSelections,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine ungültig gespeicherte Menge ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const cartItemId = addResponse.body.items[0].itemId;
+
+    await prisma.cartItem.update({
+      where: {
+        id: cartItemId,
+      },
+      data: {
+        quantity: 21,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+        })
+        .expect(409);
+
+      expect(response.body).toMatchObject({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `Die Menge des Produkts „${product.name}“ muss zwischen 1 und 20 liegen. Bitte aktualisiere deinen Warenkorb.`,
+      });
+    } finally {
+      await prisma.cartItem.update({
+        where: {
+          id: cartItemId,
+        },
+        data: {
+          quantity: 1,
+        },
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) verlangt mindestens 30 Minuten Vorbereitungszeit', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: cartResponse.body.sessionId,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+        requestedTime: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message:
+        'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
+    });
+  });
+
+  it('/api/v1/orders (POST) lehnt einen geschlossenen Abholtag ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const requestedTime = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+
+    const weekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      weekday: 'long',
+    })
+      .format(requestedTime)
+      .toUpperCase();
+
+    const storedOpeningHours = await prisma.openingHour.findMany({
+      where: {
+        weekday,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.openingHour.deleteMany({
+      where: {
+        weekday,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+          requestedTime: requestedTime.toISOString(),
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Das Restaurant ist am gewünschten Abholtag geschlossen.',
+      });
+    } finally {
+      await prisma.openingHour.createMany({
+        data: storedOpeningHours.map((openingHour) => ({
+          restaurantId: openingHour.restaurantId,
+          weekday: openingHour.weekday,
+          opensAt: openingHour.opensAt,
+          closesAt: openingHour.closesAt,
+        })),
+      });
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine Abholung außerhalb der Öffnungszeiten ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const requestedTime = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+
+    const weekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      weekday: 'long',
+    })
+      .format(requestedTime)
+      .toUpperCase();
+
+    const storedOpeningHours = await prisma.openingHour.findMany({
+      where: {
+        weekday,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.openingHour.updateMany({
+      where: {
+        weekday,
+      },
+      data: {
+        opensAt: new Date('1970-01-01T00:00:00.000Z'),
+        closesAt: new Date('1970-01-01T00:01:00.000Z'),
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+          requestedTime: requestedTime.toISOString(),
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+        message:
+          'Der gewünschte Abholzeitpunkt liegt außerhalb der Öffnungszeiten.',
+      });
+    } finally {
+      for (const openingHour of storedOpeningHours) {
+        await prisma.openingHour.update({
+          where: {
+            id: openingHour.id,
+          },
+          data: {
+            opensAt: openingHour.opensAt,
+            closesAt: openingHour.closesAt,
+          },
+        });
+      }
+    }
+  });
+
+  it('/api/v1/orders (POST) lehnt eine Abholung kurz vor Ladenschluss ab', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const requestedTime = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+
+    const berlinParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      weekday: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(requestedTime);
+
+    const weekday = berlinParts
+      .find((part) => part.type === 'weekday')!
+      .value.toUpperCase();
+
+    const requestedHour = Number(
+      berlinParts.find((part) => part.type === 'hour')!.value,
+    );
+
+    const requestedMinute = Number(
+      berlinParts.find((part) => part.type === 'minute')!.value,
+    );
+
+    const requestedMinutes = requestedHour * 60 + requestedMinute;
+    const openingMinutes = Math.max(0, requestedMinutes - 60);
+    const closingMinutes = Math.min(1439, requestedMinutes + 20);
+
+    const storedOpeningHours = await prisma.openingHour.findMany({
+      where: {
+        weekday,
+      },
+    });
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    await prisma.openingHour.updateMany({
+      where: {
+        weekday,
+      },
+      data: {
+        opensAt: new Date(
+          Date.UTC(
+            1970,
+            0,
+            1,
+            Math.floor(openingMinutes / 60),
+            openingMinutes % 60,
+          ),
+        ),
+        closesAt: new Date(
+          Date.UTC(
+            1970,
+            0,
+            1,
+            Math.floor(closingMinutes / 60),
+            closingMinutes % 60,
+          ),
+        ),
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.sessionId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+          requestedTime: requestedTime.toISOString(),
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+        message:
+          'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten vor Ladenschluss liegen.',
+      });
+    } finally {
+      for (const openingHour of storedOpeningHours) {
+        await prisma.openingHour.update({
+          where: {
+            id: openingHour.id,
+          },
+          data: {
+            opensAt: openingHour.opensAt,
+            closesAt: openingHour.closesAt,
+          },
+        });
+      }
+    }
+  });
+
+  it('/api/v1/orders (POST) verhindert zwei parallele Bestellungen', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 1,
+        optionIds,
+      })
+      .expect(201);
+
+    const orderData = {
+      cartId: cartResponse.body.sessionId,
+      customer: {
+        firstName: 'Erika',
+        lastName: 'Musterfrau',
+        phone: '+49 170 7654321',
+      },
+    };
+
+    const responses = await Promise.all([
+      request(app.getHttpServer()).post('/api/v1/orders').send(orderData),
+      request(app.getHttpServer()).post('/api/v1/orders').send(orderData),
+    ]);
+
+    const statusCodes = responses
+      .map((response) => response.status)
+      .sort((first, second) => first - second);
+
+    expect(statusCodes).toEqual([201, 409]);
+
+    const storedCart = await prisma.cart.findUniqueOrThrow({
+      where: {
+        sessionId: cartResponse.body.sessionId,
+      },
+    });
+
+    const storedOrders = await prisma.order.count({
+      where: {
+        cartId: storedCart.id,
+      },
+    });
+
+    expect(storedOrders).toBe(1);
+  });
+
   afterAll(async () => {
     await app.close();
     await prisma.$disconnect();

@@ -66,6 +66,208 @@ export class OrdersService {
         );
       }
 
+      const berlinDateParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Berlin',
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(requestedTime);
+
+      const weekday = berlinDateParts
+        .find((part) => part.type === 'weekday')
+        ?.value.toUpperCase();
+
+      const requestedHour = Number(
+        berlinDateParts.find((part) => part.type === 'hour')?.value,
+      );
+
+      const requestedMinute = Number(
+        berlinDateParts.find((part) => part.type === 'minute')?.value,
+      );
+
+      if (
+        !weekday ||
+        Number.isNaN(requestedHour) ||
+        Number.isNaN(requestedMinute)
+      ) {
+        throw new BadRequestException(
+          'Der gewünschte Abholzeitpunkt konnte nicht verarbeitet werden.',
+        );
+      }
+
+      const openingHours = await transaction.openingHour.findMany({
+        where: {
+          weekday,
+        },
+      });
+
+      if (openingHours.length === 0) {
+        throw new BadRequestException(
+          'Das Restaurant ist am gewünschten Abholtag geschlossen.',
+        );
+      }
+
+      const requestedMinutes = requestedHour * 60 + requestedMinute;
+
+      const matchingOpeningHour = openingHours.find((openingHour) => {
+        const openingMinutes =
+          openingHour.opensAt.getUTCHours() * 60 +
+          openingHour.opensAt.getUTCMinutes();
+
+        const closingMinutes =
+          openingHour.closesAt.getUTCHours() * 60 +
+          openingHour.closesAt.getUTCMinutes();
+
+        return (
+          requestedMinutes >= openingMinutes &&
+          requestedMinutes <= closingMinutes
+        );
+      });
+
+      if (!matchingOpeningHour) {
+        throw new BadRequestException(
+          'Der gewünschte Abholzeitpunkt liegt außerhalb der Öffnungszeiten.',
+        );
+      }
+
+      const closingMinutes =
+        matchingOpeningHour.closesAt.getUTCHours() * 60 +
+        matchingOpeningHour.closesAt.getUTCMinutes();
+
+      const latestPickupMinutes = closingMinutes - 30;
+
+      if (requestedMinutes > latestPickupMinutes) {
+        throw new BadRequestException(
+          'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten vor Ladenschluss liegen.',
+        );
+      }
+
+      const minimumPreparationTime = new Date(now.getTime() + 30 * 60 * 1000);
+
+      if (requestedTime < minimumPreparationTime) {
+        throw new BadRequestException(
+          'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
+        );
+      }
+
+      const unavailableItem = cart.items.find(
+        (item) => !item.product.isAvailable,
+      );
+
+      const invalidQuantityItem = cart.items.find(
+        (item) => item.quantity < 1 || item.quantity > 20,
+      );
+
+      if (invalidQuantityItem) {
+        throw new ConflictException(
+          `Die Menge des Produkts „${invalidQuantityItem.product.name}“ muss zwischen 1 und 20 liegen. Bitte aktualisiere deinen Warenkorb.`,
+        );
+      }
+
+      if (unavailableItem) {
+        throw new ConflictException(
+          `Das Produkt „${unavailableItem.product.name}“ ist nicht mehr verfügbar. Bitte aktualisiere deinen Warenkorb.`,
+        );
+      }
+
+      const selectedOptionIds = cart.items.flatMap((item) =>
+        item.options.map((option) => option.productOptionId),
+      );
+
+      const currentOptions = await transaction.productOption.findMany({
+        where: {
+          id: {
+            in: selectedOptionIds,
+          },
+        },
+        include: {
+          optionProduct: true,
+        },
+      });
+
+      const currentOptionsById = new Map(
+        currentOptions.map((option) => [option.id, option]),
+      );
+
+      for (const item of cart.items) {
+        for (const selectedOption of item.options) {
+          const currentOption = currentOptionsById.get(
+            selectedOption.productOptionId,
+          );
+
+          if (!currentOption || !currentOption.optionProduct.isAvailable) {
+            throw new ConflictException(
+              `Die Option „${selectedOption.optionName}“ ist nicht mehr verfügbar. Bitte aktualisiere deinen Warenkorb.`,
+            );
+          }
+          if (currentOption.mainProductId !== item.productId) {
+            throw new ConflictException(
+              `Die Option „${selectedOption.optionName}“ gehört nicht mehr zum Produkt „${item.product.name}“. Bitte aktualisiere deinen Warenkorb.`,
+            );
+          }
+        }
+      }
+
+      const currentOptionGroups = await transaction.productOptionGroup.findMany(
+        {
+          where: {
+            mainProductId: {
+              in: cart.items.map((item) => item.productId),
+            },
+          },
+          select: {
+            id: true,
+            mainProductId: true,
+            name: true,
+            minSelections: true,
+            maxSelections: true,
+          },
+        },
+      );
+
+      for (const item of cart.items) {
+        const optionCountsByGroupId = new Map<number, number>();
+
+        for (const selectedOption of item.options) {
+          const currentOption = currentOptionsById.get(
+            selectedOption.productOptionId,
+          );
+
+          if (!currentOption) {
+            continue;
+          }
+
+          const currentCount =
+            optionCountsByGroupId.get(currentOption.optionGroupId) ?? 0;
+
+          optionCountsByGroupId.set(
+            currentOption.optionGroupId,
+            currentCount + 1,
+          );
+        }
+
+        const itemOptionGroups = currentOptionGroups.filter(
+          (group) => group.mainProductId === item.productId,
+        );
+
+        for (const group of itemOptionGroups) {
+          const selectedCount = optionCountsByGroupId.get(group.id) ?? 0;
+
+          if (selectedCount < group.minSelections) {
+            throw new ConflictException(
+              `Für die Optionsgruppe „${group.name}“ des Produkts „${item.product.name}“ müssen mindestens ${group.minSelections} Optionen ausgewählt werden. Bitte aktualisiere deinen Warenkorb.`,
+            );
+          }
+
+          if (selectedCount > group.maxSelections) {
+            throw new ConflictException(
+              `Für die Optionsgruppe „${group.name}“ des Produkts „${item.product.name}“ dürfen höchstens ${group.maxSelections} Optionen ausgewählt werden. Bitte aktualisiere deinen Warenkorb.`,
+            );
+          }
+        }
+      }
+
       const existingOrder = await transaction.order.findFirst({
         where: {
           cartId: cart.id,
