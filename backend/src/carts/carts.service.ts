@@ -9,10 +9,31 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { Prisma } from '../generated/prisma/client';
+import {
+  cartClosed,
+  cartItemNotFound,
+  cartNotFound,
+  maximumQuantityExceeded,
+  optionSelectionInvalid,
+  productOptionInvalid,
+  productOptionUnavailable,
+  productUnavailable,
+} from './cart-errors';
 
 @Injectable()
 export class CartsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async touchCart(cartId: number): Promise<void> {
+    await this.prisma.cart.update({
+      where: {
+        id: cartId,
+      },
+      data: {
+        updatedAt: new Date(),
+      },
+    });
+  }
 
   async create() {
     const cart = await this.prisma.cart.create({
@@ -22,8 +43,9 @@ export class CartsService {
     });
 
     return {
-      sessionId: cart.sessionId,
+      cartId: cart.sessionId,
       status: cart.status,
+      currency: 'EUR',
       createdAt: cart.createdAt,
       updatedAt: cart.updatedAt,
       items: [],
@@ -40,13 +62,11 @@ export class CartsService {
     });
 
     if (!cart) {
-      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+      throw cartNotFound();
     }
 
     if (cart.status !== 'offen') {
-      throw new ConflictException(
-        'Artikel können nur zu einem offenen Warenkorb hinzugefügt werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     const product = await this.prisma.product.findUnique({
@@ -74,59 +94,9 @@ export class CartsService {
       throw new NotFoundException('Produkt ist nicht verfügbar.');
     }
 
-    const availableOptions = product.optionGroups.flatMap((group) =>
-      group.options.map((option) => ({
-        ...option,
-        group,
-      })),
-    );
+    const selectedOptions = this.validateSelectedOptions(product, optionIds);
 
-    const optionById = new Map(
-      availableOptions.map((option) => [option.id, option]),
-    );
-
-    const selectedOptions = optionIds.map((optionId) => {
-      const option = optionById.get(optionId);
-
-      if (!option) {
-        throw new BadRequestException(
-          `Die Produktoption mit der ID ${optionId} ist für dieses Produkt nicht erlaubt.`,
-        );
-      }
-
-      if (!option.optionProduct.isAvailable) {
-        throw new ConflictException(
-          `Die Produktoption "${option.optionProduct.name}" ist derzeit nicht verfügbar.`,
-        );
-      }
-
-      return option;
-    });
-
-    for (const group of product.optionGroups) {
-      const selectedCount = selectedOptions.filter(
-        (option) => option.optionGroupId === group.id,
-      ).length;
-
-      if (selectedCount < group.minSelections) {
-        throw new BadRequestException(
-          `Für die Optionsgruppe "${group.name}" müssen mindestens ${group.minSelections} Optionen ausgewählt werden.`,
-        );
-      }
-
-      if (selectedCount > group.maxSelections) {
-        throw new BadRequestException(
-          `Für die Optionsgruppe "${group.name}" dürfen höchstens ${group.maxSelections} Optionen ausgewählt werden.`,
-        );
-      }
-    }
-
-    const sortedOptionIds = [...optionIds].sort(
-      (first, second) => first - second,
-    );
-
-    const configurationKey =
-      `product:${productId}|options:` + sortedOptionIds.join(',');
+    const configurationKey = this.createConfigurationKey(productId, optionIds);
 
     const existingItem = await this.prisma.cartItem.findUnique({
       where: {
@@ -138,9 +108,7 @@ export class CartsService {
     });
 
     if (existingItem && existingItem.quantity + quantity > 99) {
-      throw new ConflictException(
-        'Von einer Produktkonfiguration sind höchstens 99 Stück pro Warenkorb erlaubt.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     await this.prisma.cartItem.upsert({
@@ -183,8 +151,28 @@ export class CartsService {
       },
     });
 
+    await this.touchCart(cart.id);
+
     return this.findPublicCart(sessionId);
   }
+
+  private readonly productWithOptionGroups = {
+    optionGroups: {
+      orderBy: {
+        sortOrder: 'asc' as const,
+      },
+      include: {
+        options: {
+          orderBy: {
+            sortOrder: 'asc' as const,
+          },
+          include: {
+            optionProduct: true,
+          },
+        },
+      },
+    },
+  };
 
   async updateItem(
     sessionId: string,
@@ -212,13 +200,11 @@ export class CartsService {
     });
 
     if (!cart) {
-      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+      throw cartNotFound();
     }
 
     if (cart.status !== 'offen') {
-      throw new ConflictException(
-        'Positionen können nur in einem offenen Warenkorb geändert werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     const item = await this.prisma.cartItem.findFirst({
@@ -238,6 +224,8 @@ export class CartsService {
           id: item.id,
         },
       });
+
+      await this.touchCart(cart.id);
 
       return this.findPublicCart(sessionId);
     }
@@ -272,9 +260,7 @@ export class CartsService {
     }
 
     if (targetQuantity > item.quantity && !product.isAvailable) {
-      throw new ConflictException(
-        'Die Menge eines nicht mehr verfügbaren Produkts kann nicht erhöht werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     if (optionIds === undefined) {
@@ -283,72 +269,22 @@ export class CartsService {
           id: item.id,
         },
         data: {
-          quantity: targetQuantity,
+          quantity,
         },
       });
+
+      await this.touchCart(cart.id);
 
       return this.findPublicCart(sessionId);
     }
 
     if (!product.isAvailable) {
-      throw new ConflictException(
-        'Die Optionen eines nicht mehr verfügbaren Produkts können nicht geändert werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
-    const availableOptions = product.optionGroups.flatMap((group) =>
-      group.options.map((option) => ({
-        ...option,
-        group,
-      })),
-    );
+    const selectedOptions = this.validateSelectedOptions(product, optionIds);
 
-    const optionById = new Map(
-      availableOptions.map((option) => [option.id, option]),
-    );
-
-    const selectedOptions = optionIds.map((optionId) => {
-      const option = optionById.get(optionId);
-
-      if (!option) {
-        throw new BadRequestException(
-          `Die Produktoption mit der ID ${optionId} ist für dieses Produkt nicht erlaubt.`,
-        );
-      }
-
-      if (!option.optionProduct.isAvailable) {
-        throw new ConflictException(
-          `Die Produktoption "${option.optionProduct.name}" ist derzeit nicht verfügbar.`,
-        );
-      }
-
-      return option;
-    });
-
-    for (const group of product.optionGroups) {
-      const selectedCount = selectedOptions.filter(
-        (option) => option.optionGroupId === group.id,
-      ).length;
-
-      if (selectedCount < group.minSelections) {
-        throw new BadRequestException(
-          `Für die Optionsgruppe "${group.name}" müssen mindestens ${group.minSelections} Optionen ausgewählt werden.`,
-        );
-      }
-
-      if (selectedCount > group.maxSelections) {
-        throw new BadRequestException(
-          `Für die Optionsgruppe "${group.name}" dürfen höchstens ${group.maxSelections} Optionen ausgewählt werden.`,
-        );
-      }
-    }
-
-    const sortedOptionIds = [...optionIds].sort(
-      (first, second) => first - second,
-    );
-
-    const configurationKey =
-      `product:${product.id}|options:` + sortedOptionIds.join(',');
+    const configurationKey = this.createConfigurationKey(product.id, optionIds);
 
     const collidingItem = await this.prisma.cartItem.findFirst({
       where: {
@@ -364,9 +300,7 @@ export class CartsService {
       const combinedQuantity = collidingItem.quantity + targetQuantity;
 
       if (combinedQuantity > 99) {
-        throw new ConflictException(
-          'Von einer Produktkonfiguration sind höchstens 99 Stück pro Warenkorb erlaubt.',
-        );
+        throw maximumQuantityExceeded();
       }
 
       await this.prisma.$transaction(async (transaction) => {
@@ -382,6 +316,14 @@ export class CartsService {
         await transaction.cartItem.delete({
           where: {
             id: item.id,
+          },
+        });
+        await transaction.cart.update({
+          where: {
+            id: cart.id,
+          },
+          data: {
+            updatedAt: new Date(),
           },
         });
       });
@@ -416,6 +358,14 @@ export class CartsService {
           },
         },
       });
+      await transaction.cart.update({
+        where: {
+          id: cart.id,
+        },
+        data: {
+          updatedAt: new Date(),
+        },
+      });
     });
 
     return this.findPublicCart(sessionId);
@@ -436,13 +386,11 @@ export class CartsService {
     });
 
     if (!cart) {
-      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+      throw cartNotFound();
     }
 
     if (cart.status !== 'offen') {
-      throw new ConflictException(
-        'Positionen können nur aus einem offenen Warenkorb entfernt werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     const item = await this.prisma.cartItem.findFirst({
@@ -462,6 +410,8 @@ export class CartsService {
       },
     });
 
+    await this.touchCart(cart.id);
+
     return this.findPublicCart(sessionId);
   }
 
@@ -475,18 +425,18 @@ export class CartsService {
     });
 
     if (!cart) {
-      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+      throw cartNotFound();
     }
 
     if (cart.status !== 'offen') {
-      throw new ConflictException(
-        'Ein geschlossener Warenkorb kann nicht geändert werden.',
-      );
+      throw maximumQuantityExceeded();
     }
 
     await this.prisma.cartItem.deleteMany({
       where: { cartId: cart.id },
     });
+
+    await this.touchCart(cart.id);
 
     return this.findPublicCart(cartId);
   }
@@ -521,7 +471,7 @@ export class CartsService {
     });
 
     if (!cart) {
-      throw new NotFoundException('Warenkorb wurde nicht gefunden.');
+      throw cartNotFound();
     }
 
     const items = cart.items.map((item) => {
@@ -568,12 +518,89 @@ export class CartsService {
     }, new Prisma.Decimal(0));
 
     return {
-      sessionId: cart.sessionId,
+      cartId: cart.sessionId,
       status: cart.status,
+      currency: 'EUR',
       createdAt: cart.createdAt,
       updatedAt: cart.updatedAt,
       items,
       total: total.toFixed(2),
     };
+  }
+
+  private validateSelectedOptions<
+    T extends {
+      optionGroups: Array<{
+        id: number;
+        name: string;
+        minSelections: number;
+        maxSelections: number;
+        options: Array<{
+          id: number;
+          optionGroupId: number;
+          surcharge: Prisma.Decimal;
+          optionProduct: {
+            name: string;
+            isAvailable: boolean;
+          };
+        }>;
+      }>;
+    },
+  >(product: T, optionIds: number[]) {
+    const availableOptions = product.optionGroups.flatMap((group) =>
+      group.options.map((option) => ({
+        ...option,
+        group,
+      })),
+    );
+
+    const optionById = new Map(
+      availableOptions.map((option) => [option.id, option]),
+    );
+
+    const selectedOptions = optionIds.map((optionId) => {
+      const option = optionById.get(optionId);
+
+      if (!option) {
+        throw productOptionInvalid(optionId);
+      }
+
+      if (!option.optionProduct.isAvailable) {
+        throw productOptionUnavailable(option.optionProduct.name);
+      }
+
+      return option;
+    });
+
+    for (const group of product.optionGroups) {
+      const selectedCount = selectedOptions.filter(
+        (option) => option.optionGroupId === group.id,
+      ).length;
+
+      if (selectedCount < group.minSelections) {
+        throw optionSelectionInvalid(
+          `Für die Optionsgruppe "${group.name}" müssen mindestens ${group.minSelections} Optionen ausgewählt werden.`,
+        );
+      }
+
+      if (selectedCount > group.maxSelections) {
+        throw optionSelectionInvalid(
+          `Für die Optionsgruppe "${group.name}" dürfen höchstens ${group.maxSelections} Optionen ausgewählt werden.`,
+        );
+      }
+    }
+
+    return selectedOptions;
+  }
+
+  private createConfigurationKey(
+    productId: number,
+    optionIds: number[],
+  ): string {
+    const sortedOptionIds = [...optionIds].sort(
+      (first, second) => first - second,
+    );
+
+    return `product:${productId}|options:${sortedOptionIds.join(',')}`;
   }
 }

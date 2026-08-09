@@ -16,6 +16,15 @@ describe('HealthController (e2e)', () => {
   let orderNumber: string;
   let paymentMethodId: number;
 
+  function getValidRequestedTime(): string {
+    const requestedTime = new Date();
+
+    requestedTime.setDate(requestedTime.getDate() + 1);
+    requestedTime.setHours(12, 0, 0, 0);
+
+    return requestedTime.toISOString();
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -609,7 +618,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -620,7 +629,7 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const increasedResponse = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 3,
       })
@@ -633,7 +642,7 @@ describe('HealthController (e2e)', () => {
     });
 
     const decreasedResponse = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 1,
       })
@@ -654,7 +663,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -665,7 +674,7 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const response = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 0,
       })
@@ -680,7 +689,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/ungueltig`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/ungueltig`)
       .send({
         quantity: 1,
       })
@@ -705,7 +714,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${firstCartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${firstCartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -716,9 +725,7 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const response = await request(app.getHttpServer())
-      .patch(
-        `/api/v1/carts/${secondCartResponse.body.sessionId}/items/${itemId}`,
-      )
+      .patch(`/api/v1/carts/${secondCartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 2,
       })
@@ -739,7 +746,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 2,
@@ -750,7 +757,7 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const response = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 2,
         optionIds: alternativeOptionIds,
@@ -785,7 +792,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -820,7 +827,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 2,
@@ -831,11 +838,11 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const response = await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .expect(200);
 
     expect(response.body).toMatchObject({
-      sessionId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       status: 'offen',
       items: [],
       total: '0.00',
@@ -848,7 +855,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/ungueltig`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items/ungueltig`)
       .expect(400);
 
     expect(response.body).toMatchObject({
@@ -870,7 +877,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${firstCartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${firstCartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -881,9 +888,7 @@ describe('HealthController (e2e)', () => {
     const itemId = addResponse.body.items[0].itemId;
 
     const response = await request(app.getHttpServer())
-      .delete(
-        `/api/v1/carts/${secondCartResponse.body.sessionId}/items/${itemId}`,
-      )
+      .delete(`/api/v1/carts/${secondCartResponse.body.cartId}/items/${itemId}`)
       .expect(404);
 
     expect(response.body).toMatchObject({
@@ -924,7 +929,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/999999`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items/999999`)
       .expect(404);
   });
 
@@ -936,7 +941,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -945,7 +950,7 @@ describe('HealthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(
-        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+        `/api/v1/carts/${cartResponse.body.cartId}/items/${addResponse.body.items[0].itemId}`,
       )
       .send({})
       .expect(400);
@@ -959,7 +964,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -968,7 +973,7 @@ describe('HealthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(
-        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+        `/api/v1/carts/${cartResponse.body.cartId}/items/${addResponse.body.items[0].itemId}`,
       )
       .send({
         quantity: 100,
@@ -984,7 +989,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -993,7 +998,7 @@ describe('HealthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(
-        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+        `/api/v1/carts/${cartResponse.body.cartId}/items/${addResponse.body.items[0].itemId}`,
       )
       .send({
         optionIds: [999999],
@@ -1009,7 +1014,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1018,7 +1023,7 @@ describe('HealthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(
-        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+        `/api/v1/carts/${cartResponse.body.cartId}/items/${addResponse.body.items[0].itemId}`,
       )
       .send({
         optionIds: [optionIds[0], optionIds[0]],
@@ -1026,40 +1031,45 @@ describe('HealthController (e2e)', () => {
       .expect(400);
   });
 
-  it('/api/v1/carts/:cartId/items/:itemId (PATCH) lehnt zwei Optionen derselben Gruppe ab', async () => {
+  it('/api/v1/carts/:cartId/items/:itemId (PATCH) erlaubt zwei Beilagen derselben Gruppe', async () => {
     const { product } = await getConfiguredProduct();
 
-    const sauceGroup = await prisma.productOptionGroup.findFirstOrThrow({
+    const sideGroup = await prisma.productOptionGroup.findFirstOrThrow({
       where: {
         mainProductId: product.id,
-        optionType: 'SAUCE',
+        optionType: 'SIDE',
       },
       include: {
         options: true,
       },
     });
 
-    const optionIds = sauceGroup.options.map((o) => o.id);
+    expect(sideGroup.maxSelections).toBe(2);
+
+    const optionIds = sideGroup.options.slice(0, 2).map((option) => option.id);
+    expect(optionIds).toHaveLength(2);
 
     const cartResponse = await request(app.getHttpServer())
       .post('/api/v1/carts')
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
       });
 
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .patch(
-        `/api/v1/carts/${cartResponse.body.sessionId}/items/${addResponse.body.items[0].itemId}`,
+        `/api/v1/carts/${cartResponse.body.cartId}/items/${addResponse.body.items[0].itemId}`,
       )
       .send({
         optionIds,
       })
-      .expect(400);
+      .expect(200);
+
+    expect(response.body.items[0].options).toHaveLength(2);
   });
 
   it('/api/v1/carts/:cartId/items (POST) trennt unterschiedliche Optionsauswahlen', async () => {
@@ -1070,7 +1080,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/carts')
       .expect(201);
 
-    const url = `/api/v1/carts/${cartResponse.body.sessionId}/items`;
+    const url = `/api/v1/carts/${cartResponse.body.cartId}/items`;
 
     await request(app.getHttpServer())
       .post(url)
@@ -1129,7 +1139,7 @@ describe('HealthController (e2e)', () => {
       total: '0.00',
     });
 
-    expect(response.body.sessionId).toMatch(
+    expect(response.body.cartId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
 
@@ -1147,7 +1157,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 2,
@@ -1175,7 +1185,7 @@ describe('HealthController (e2e)', () => {
     const expectedLineTotal = expectedUnitPrice * 2;
 
     expect(response.body).toMatchObject({
-      sessionId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       status: 'offen',
       items: [
         {
@@ -1218,7 +1228,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/carts')
       .expect(201);
 
-    const url = `/api/v1/carts/${cartResponse.body.sessionId}/items`;
+    const url = `/api/v1/carts/${cartResponse.body.cartId}/items`;
 
     await request(app.getHttpServer())
       .post(url)
@@ -1248,7 +1258,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({ productId: 1, quantity: 0 })
       .expect(400);
   });
@@ -1266,7 +1276,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({ productId: 2147483647, quantity: 1 })
       .expect(404);
   });
@@ -1281,7 +1291,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1303,7 +1313,7 @@ describe('HealthController (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+        .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
         .send({
           quantity: 2,
         })
@@ -1344,7 +1354,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1373,7 +1383,7 @@ describe('HealthController (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+        .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
         .send({
           quantity: 2,
         })
@@ -1415,7 +1425,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1427,7 +1437,7 @@ describe('HealthController (e2e)', () => {
 
     await prisma.cart.update({
       where: {
-        sessionId: cartResponse.body.sessionId,
+        sessionId: cartResponse.body.cartId,
       },
       data: {
         status: 'abgeschlossen',
@@ -1435,7 +1445,7 @@ describe('HealthController (e2e)', () => {
     });
 
     const addAttempt = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1449,7 +1459,7 @@ describe('HealthController (e2e)', () => {
     });
 
     const patchAttempt = await request(app.getHttpServer())
-      .patch(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .patch(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .send({
         quantity: 2,
       })
@@ -1461,7 +1471,7 @@ describe('HealthController (e2e)', () => {
     });
 
     const deleteAttempt = await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items/${itemId}`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items/${itemId}`)
       .expect(409);
 
     expect(deleteAttempt.body).toMatchObject({
@@ -1479,7 +1489,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${existingCartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${existingCartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 2,
@@ -1504,7 +1514,7 @@ describe('HealthController (e2e)', () => {
         .expect(201);
 
       await request(app.getHttpServer())
-        .post(`/api/v1/carts/${newCartResponse.body.sessionId}/items`)
+        .post(`/api/v1/carts/${newCartResponse.body.cartId}/items`)
         .send({
           productId: product.id,
           quantity: 1,
@@ -1514,7 +1524,7 @@ describe('HealthController (e2e)', () => {
 
       await request(app.getHttpServer())
         .patch(
-          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+          `/api/v1/carts/${existingCartResponse.body.cartId}/items/${itemId}`,
         )
         .send({
           quantity: 3,
@@ -1523,7 +1533,7 @@ describe('HealthController (e2e)', () => {
 
       const decreasedResponse = await request(app.getHttpServer())
         .patch(
-          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+          `/api/v1/carts/${existingCartResponse.body.cartId}/items/${itemId}`,
         )
         .send({
           quantity: 1,
@@ -1537,7 +1547,7 @@ describe('HealthController (e2e)', () => {
 
       await request(app.getHttpServer())
         .patch(
-          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+          `/api/v1/carts/${existingCartResponse.body.cartId}/items/${itemId}`,
         )
         .send({
           optionIds: alternativeOptionIds,
@@ -1546,7 +1556,7 @@ describe('HealthController (e2e)', () => {
 
       const deleteResponse = await request(app.getHttpServer())
         .delete(
-          `/api/v1/carts/${existingCartResponse.body.sessionId}/items/${itemId}`,
+          `/api/v1/carts/${existingCartResponse.body.cartId}/items/${itemId}`,
         )
         .expect(200);
 
@@ -1572,7 +1582,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -1596,7 +1606,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .set('Content-Type', 'application/json')
       .send('{"productId": 1, "quantity":')
       .expect(400);
@@ -1613,7 +1623,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: 'kein-produkt',
         quantity: 'keine-menge',
@@ -1635,11 +1645,11 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .get(`/api/v1/carts/${cartResponse.body.sessionId}`)
+      .get(`/api/v1/carts/${cartResponse.body.cartId}`)
       .expect(200);
 
     expect(response.body).toMatchObject({
-      sessionId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       status: 'offen',
       items: [],
       total: '0.00',
@@ -1668,7 +1678,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 2,
@@ -1677,11 +1687,11 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .expect(200);
 
     expect(response.body).toMatchObject({
-      sessionId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       status: 'offen',
       items: [],
       total: '0.00',
@@ -1690,7 +1700,7 @@ describe('HealthController (e2e)', () => {
     const remainingItems = await prisma.cartItem.count({
       where: {
         cart: {
-          sessionId: cartResponse.body.sessionId,
+          sessionId: cartResponse.body.cartId,
         },
       },
     });
@@ -1704,11 +1714,11 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .delete(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .delete(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .expect(200);
 
     expect(response.body).toMatchObject({
-      sessionId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       status: 'offen',
       items: [],
       total: '0.00',
@@ -1722,8 +1732,205 @@ describe('HealthController (e2e)', () => {
 
     expect(response.body).toMatchObject({
       statusCode: 404,
+      code: 'CART_NOT_FOUND',
       error: 'Not Found',
       message: 'Warenkorb wurde nicht gefunden.',
+    });
+  });
+
+  describe('finaler Warenkorbvertrag', () => {
+    it('verwendet öffentlich cartId und EUR statt des internen Felds sessionId', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        cartId: expect.any(String),
+        currency: 'EUR',
+      });
+      expect(response.body).not.toHaveProperty('sessionId');
+    });
+
+    it('lehnt beim Hinzufügen jede Menge außerhalb von 1 bis 99 und eine fehlende Menge ab', async () => {
+      const { product } = await getConfiguredProduct();
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+      const url = `/api/v1/carts/${cartResponse.body.cartId}/items`;
+
+      for (const quantity of [-1, 0, 1.5, 100]) {
+        await request(app.getHttpServer())
+          .post(url)
+          .send({ productId: product.id, quantity })
+          .expect(400);
+      }
+
+      await request(app.getHttpServer())
+        .post(url)
+        .send({ productId: product.id })
+        .expect(400);
+    });
+
+    it('behandelt die Optionsreihenfolge als identische Konfiguration und begrenzt die zusammengeführte Menge auf 99', async () => {
+      const { product, optionIds } = await getConfiguredProduct();
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+      const url = `/api/v1/carts/${cartResponse.body.cartId}/items`;
+
+      await request(app.getHttpServer())
+        .post(url)
+        .send({ productId: product.id, quantity: 98, optionIds })
+        .expect(201);
+
+      const mergedResponse = await request(app.getHttpServer())
+        .post(url)
+        .send({
+          productId: product.id,
+          quantity: 1,
+          optionIds: [...optionIds].reverse(),
+        })
+        .expect(201);
+
+      expect(mergedResponse.body.items).toHaveLength(1);
+      expect(mergedResponse.body.items[0].quantity).toBe(99);
+
+      const rejectedResponse = await request(app.getHttpServer())
+        .post(url)
+        .send({ productId: product.id, quantity: 1, optionIds })
+        .expect(409);
+
+      expect(rejectedResponse.body).toMatchObject({
+        statusCode: 409,
+        code: 'MAXIMUM_QUANTITY_EXCEEDED',
+      });
+    });
+
+    it('führt zwei Positionen zusammen, wenn eine Optionsänderung dieselbe Konfiguration erzeugt', async () => {
+      const { product, optionIds, alternativeOptionIds } =
+        await getConfiguredProduct();
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+      const url = `/api/v1/carts/${cartResponse.body.cartId}/items`;
+
+      await request(app.getHttpServer())
+        .post(url)
+        .send({ productId: product.id, quantity: 2, optionIds })
+        .expect(201);
+
+      const secondPosition = await request(app.getHttpServer())
+        .post(url)
+        .send({
+          productId: product.id,
+          quantity: 3,
+          optionIds: alternativeOptionIds,
+        })
+        .expect(201);
+
+      const secondItem = secondPosition.body.items.find(
+        (item: { options: Array<{ id: number }> }) =>
+          item.options.some((option) => option.id === alternativeOptionIds[0]),
+      );
+      expect(secondItem).toBeDefined();
+
+      const response = await request(app.getHttpServer())
+        .patch(
+          `/api/v1/carts/${cartResponse.body.cartId}/items/${secondItem.itemId}`,
+        )
+        .send({ optionIds })
+        .expect(200);
+
+      expect(response.body.items).toHaveLength(1);
+      expect(response.body.items[0].quantity).toBe(5);
+    });
+
+    it('prüft Pflichtauswahlen und setzt die temporäre Gruppenregel immer zurück', async () => {
+      const { product } = await getConfiguredProduct();
+      const optionGroup = product.optionGroups[0];
+      expect(optionGroup).toBeDefined();
+      const originalMinSelections = optionGroup.minSelections;
+
+      try {
+        await prisma.productOptionGroup.update({
+          where: { id: optionGroup.id },
+          data: { minSelections: 1 },
+        });
+
+        const cartResponse = await request(app.getHttpServer())
+          .post('/api/v1/carts')
+          .expect(201);
+        const response = await request(app.getHttpServer())
+          .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
+          .send({ productId: product.id, quantity: 1, optionIds: [] })
+          .expect(400);
+
+        expect(response.body).toMatchObject({
+          statusCode: 400,
+          code: 'OPTION_SELECTION_INVALID',
+        });
+      } finally {
+        await prisma.productOptionGroup.update({
+          where: { id: optionGroup.id },
+          data: { minSelections: originalMinSelections },
+        });
+      }
+    });
+
+    it('lehnt eine deaktivierte Produktoption ab und setzt deren Verfügbarkeit zurück', async () => {
+      const { product, optionIds } = await getConfiguredProduct();
+      const option = await prisma.productOption.findUniqueOrThrow({
+        where: { id: optionIds[0] },
+        include: { optionProduct: true },
+      });
+      const originalAvailability = option.optionProduct.isAvailable;
+
+      try {
+        await prisma.product.update({
+          where: { id: option.optionProductId },
+          data: { isAvailable: false },
+        });
+
+        const cartResponse = await request(app.getHttpServer())
+          .post('/api/v1/carts')
+          .expect(201);
+        const response = await request(app.getHttpServer())
+          .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
+          .send({ productId: product.id, quantity: 1, optionIds: [option.id] })
+          .expect(409);
+
+        expect(response.body).toMatchObject({
+          statusCode: 409,
+          code: 'PRODUCT_OPTION_UNAVAILABLE',
+        });
+      } finally {
+        await prisma.product.update({
+          where: { id: option.optionProductId },
+          data: { isAvailable: originalAvailability },
+        });
+      }
+    });
+
+    it('aktualisiert updatedAt nach einer erfolgreichen Mutation', async () => {
+      const { product } = await getConfiguredProduct();
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+      const oldUpdatedAt = new Date('2020-01-01T00:00:00.000Z');
+
+      await prisma.cart.update({
+        where: { sessionId: cartResponse.body.cartId },
+        data: { updatedAt: oldUpdatedAt },
+      });
+
+      const response = await request(app.getHttpServer())
+        .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
+        .send({ productId: product.id, quantity: 1, optionIds: [] })
+        .expect(201);
+
+      expect(new Date(response.body.updatedAt).getTime()).toBeGreaterThan(
+        oldUpdatedAt.getTime(),
+      );
     });
   });
 
@@ -1734,7 +1941,7 @@ describe('HealthController (e2e)', () => {
       .post('/api/v1/carts')
       .expect(201);
 
-    orderCartId = cartResponse.body.sessionId;
+    orderCartId = cartResponse.body.cartId;
 
     expect(orderCartId).toEqual(expect.any(String));
 
@@ -1763,6 +1970,7 @@ describe('HealthController (e2e)', () => {
       .send({
         cartId: orderCartId,
         paymentMethodId,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Max',
           lastName: 'Mustermann',
@@ -1835,6 +2043,7 @@ describe('HealthController (e2e)', () => {
       .send({
         cartId: orderCartId,
         paymentMethodId,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Max',
           lastName: 'Mustermann',
@@ -1857,8 +2066,9 @@ describe('HealthController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/orders')
       .send({
-        cartId: cartResponse.body.sessionId,
+        cartId: cartResponse.body.cartId,
         paymentMethodId,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -1881,6 +2091,7 @@ describe('HealthController (e2e)', () => {
       .send({
         cartId: crypto.randomUUID(),
         paymentMethodId,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -2016,7 +2227,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2037,8 +2248,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2055,7 +2267,7 @@ describe('HealthController (e2e)', () => {
 
       const storedCart = await prisma.cart.findUniqueOrThrow({
         where: {
-          sessionId: cartResponse.body.sessionId,
+          sessionId: cartResponse.body.cartId,
         },
       });
 
@@ -2089,7 +2301,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2110,8 +2322,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2154,7 +2367,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2177,8 +2390,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2226,7 +2440,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2248,8 +2462,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2302,7 +2517,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2324,8 +2539,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2367,7 +2583,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const addResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2390,8 +2606,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2420,12 +2637,32 @@ describe('HealthController (e2e)', () => {
   it('/api/v1/orders (POST) verlangt mindestens 30 Minuten Vorbereitungszeit', async () => {
     const { product, optionIds } = await getConfiguredProduct();
 
+    const requestedTime = new Date(Date.now() + 10 * 60 * 1000);
+
+    const berlinParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      weekday: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(requestedTime);
+
+    const weekday = berlinParts
+      .find((part) => part.type === 'weekday')!
+      .value.toUpperCase();
+
+    const storedOpeningHours = await prisma.openingHour.findMany({
+      where: {
+        weekday,
+      },
+    });
+
     const cartResponse = await request(app.getHttpServer())
       .post('/api/v1/carts')
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2433,26 +2670,50 @@ describe('HealthController (e2e)', () => {
       })
       .expect(201);
 
-    const response = await request(app.getHttpServer())
-      .post('/api/v1/orders')
-      .send({
-        cartId: cartResponse.body.sessionId,
-        paymentMethodId,
-        customer: {
-          firstName: 'Erika',
-          lastName: 'Musterfrau',
-          phone: '+49 170 7654321',
-        },
-        requestedTime: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      })
-      .expect(400);
-
-    expect(response.body).toMatchObject({
-      statusCode: 400,
-      error: 'Bad Request',
-      message:
-        'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
+    await prisma.openingHour.updateMany({
+      where: {
+        weekday,
+      },
+      data: {
+        opensAt: new Date(Date.UTC(1970, 0, 1, 0, 0)),
+        closesAt: new Date(Date.UTC(1970, 0, 1, 23, 59)),
+      },
     });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.cartId,
+          paymentMethodId,
+          customer: {
+            firstName: 'Erika',
+            lastName: 'Musterfrau',
+            phone: '+49 170 7654321',
+          },
+          requestedTime: requestedTime.toISOString(),
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+        message:
+          'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
+      });
+    } finally {
+      for (const openingHour of storedOpeningHours) {
+        await prisma.openingHour.update({
+          where: {
+            id: openingHour.id,
+          },
+          data: {
+            opensAt: openingHour.opensAt,
+            closesAt: openingHour.closesAt,
+          },
+        });
+      }
+    }
   });
 
   it('/api/v1/orders (POST) lehnt einen geschlossenen Abholtag ab', async () => {
@@ -2478,7 +2739,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2496,7 +2757,7 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
           customer: {
             firstName: 'Erika',
@@ -2547,7 +2808,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2569,7 +2830,7 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
           customer: {
             firstName: 'Erika',
@@ -2641,7 +2902,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2679,7 +2940,7 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId,
           customer: {
             firstName: 'Erika',
@@ -2719,7 +2980,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2728,8 +2989,9 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const orderData = {
-      cartId: cartResponse.body.sessionId,
+      cartId: cartResponse.body.cartId,
       paymentMethodId,
+      requestedTime: getValidRequestedTime(),
       customer: {
         firstName: 'Erika',
         lastName: 'Musterfrau',
@@ -2750,7 +3012,7 @@ describe('HealthController (e2e)', () => {
 
     const storedCart = await prisma.cart.findUniqueOrThrow({
       where: {
-        sessionId: cartResponse.body.sessionId,
+        sessionId: cartResponse.body.cartId,
       },
     });
 
@@ -2790,7 +3052,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2801,8 +3063,9 @@ describe('HealthController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/orders')
       .send({
-        cartId: cartResponse.body.sessionId,
+        cartId: cartResponse.body.cartId,
         paymentMethodId: 2147483647,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',
@@ -2835,7 +3098,7 @@ describe('HealthController (e2e)', () => {
         .expect(201);
 
       await request(app.getHttpServer())
-        .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+        .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
         .send({
           productId: product.id,
           quantity: 1,
@@ -2846,8 +3109,9 @@ describe('HealthController (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/orders')
         .send({
-          cartId: cartResponse.body.sessionId,
+          cartId: cartResponse.body.cartId,
           paymentMethodId: inactivePaymentMethod.id,
+          requestedTime: getValidRequestedTime(),
           customer: {
             firstName: 'Erika',
             lastName: 'Musterfrau',
@@ -2884,7 +3148,7 @@ describe('HealthController (e2e)', () => {
       .expect(201);
 
     const cartWithItemResponse = await request(app.getHttpServer())
-      .post(`/api/v1/carts/${cartResponse.body.sessionId}/items`)
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
       .send({
         productId: product.id,
         quantity: 1,
@@ -2895,8 +3159,9 @@ describe('HealthController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/orders')
       .send({
-        cartId: cartResponse.body.sessionId,
+        cartId: cartResponse.body.cartId,
         paymentMethodId,
+        requestedTime: getValidRequestedTime(),
         customer: {
           firstName: 'Erika',
           lastName: 'Musterfrau',

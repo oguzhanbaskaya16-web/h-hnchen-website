@@ -35,6 +35,14 @@ export class OrdersService {
       );
     }
 
+    const minimumPreparationTime = new Date(now.getTime() + 30 * 60 * 1000);
+
+    if (requestedTime.getTime() < minimumPreparationTime.getTime()) {
+      throw new BadRequestException(
+        'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
+      );
+    }
+
     const orderNumber = await this.prisma.$transaction(async (transaction) => {
       const cart = await transaction.cart.findUnique({
         where: {
@@ -140,14 +148,6 @@ export class OrdersService {
       if (requestedMinutes > latestPickupMinutes) {
         throw new BadRequestException(
           'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten vor Ladenschluss liegen.',
-        );
-      }
-
-      const minimumPreparationTime = new Date(now.getTime() + 30 * 60 * 1000);
-
-      if (requestedTime < minimumPreparationTime) {
-        throw new BadRequestException(
-          'Der gewünschte Abholzeitpunkt muss mindestens 30 Minuten in der Zukunft liegen.',
         );
       }
 
