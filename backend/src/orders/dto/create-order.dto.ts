@@ -1,31 +1,37 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
   IsISO8601,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Length,
   Matches,
   MaxLength,
-  ValidateNested,
-  IsInt,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
+const trimString = (value: unknown): unknown =>
+  typeof value === 'string' ? value.trim() : value;
+
+const trimTransform = ({ value }: TransformFnParams): unknown =>
+  trimString(value as unknown);
+
 export class OrderCustomerDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimTransform)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   firstName: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimTransform)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   lastName: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimTransform)
   @IsString()
   @Length(6, 30)
   @Matches(/^\+?[0-9][0-9 ()/-]*$/, {
@@ -53,7 +59,7 @@ export class CreateOrderDto {
   requestedTime?: string;
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimTransform)
   @IsString()
   @MaxLength(1000)
   note?: string;
