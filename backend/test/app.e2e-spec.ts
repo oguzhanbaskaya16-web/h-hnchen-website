@@ -227,6 +227,380 @@ describe('HealthController (e2e)', () => {
       });
   });
 
+  describe('/api/v1/products/:productId (GET)', () => {
+    it('liefert vollständige Details eines verfügbaren Produkts', async () => {
+      const product = await prisma.product.findFirstOrThrow({
+        where: {
+          name: 'Halbes Hähnchen',
+          isAvailable: true,
+        },
+        include: {
+          category: true,
+          optionGroups: {
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+            include: {
+              options: {
+                where: {
+                  optionProduct: {
+                    isAvailable: true,
+                  },
+                },
+                orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+                include: {
+                  optionProduct: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/products/${product.id}`)
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        id: product.id,
+        name: product.name,
+        shortDescription: product.shortDescription,
+        description: product.description,
+        price: product.price.toFixed(2),
+        image: product.image,
+        preparationTimeMinutes: product.preparationTimeMinutes,
+        allergenInformation: product.allergenInformation,
+        isHighlight: product.isHighlight,
+        isAvailable: true,
+        category: {
+          id: product.category.id,
+          name: product.category.name,
+        },
+      });
+
+      expect(response.body.price).toMatch(/^\d+\.\d{2}$/);
+      expect(response.body.optionGroups).toHaveLength(
+        product.optionGroups.length,
+      );
+      expect(response.body.recommendations).toEqual(expect.any(Array));
+
+      expect(
+        response.body.optionGroups.map((group: { id: number }) => group.id),
+      ).toEqual(product.optionGroups.map((group) => group.id));
+
+      for (const group of response.body.optionGroups) {
+        expect(group).toMatchObject({
+          id: expect.any(Number),
+          name: expect.any(String),
+          optionType: expect.any(String),
+          minSelections: expect.any(Number),
+          maxSelections: expect.any(Number),
+          options: expect.any(Array),
+        });
+
+        for (const option of group.options) {
+          expect(option).toMatchObject({
+            id: expect.any(Number),
+            productId: expect.any(Number),
+            name: expect.any(String),
+            surcharge: expect.any(String),
+            isAvailable: true,
+          });
+
+          expect(option.surcharge).toMatch(/^\d+\.\d{2}$/);
+        }
+      }
+
+      expect(response.body).not.toHaveProperty('categoryId');
+    });
+
+    it('liefert Optionsgruppen und Optionen in der gespeicherten Reihenfolge', async () => {
+      const product = await prisma.product.findFirstOrThrow({
+        where: {
+          name: 'Halbes Hähnchen',
+          isAvailable: true,
+        },
+        include: {
+          optionGroups: {
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+            include: {
+              options: {
+                where: {
+                  optionProduct: {
+                    isAvailable: true,
+                  },
+                },
+                orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+              },
+            },
+          },
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/products/${product.id}`)
+        .expect(200);
+
+      expect(
+        response.body.optionGroups.map((group: { id: number }) => group.id),
+      ).toEqual(product.optionGroups.map((group) => group.id));
+
+      for (const [index, group] of product.optionGroups.entries()) {
+        expect(
+          response.body.optionGroups[index].options.map(
+            (option: { id: number }) => option.id,
+          ),
+        ).toEqual(group.options.map((option) => option.id));
+      }
+    });
+
+    it('filtert ein deaktiviertes Optionsprodukt heraus', async () => {
+      const product = await prisma.product.findFirstOrThrow({
+        where: {
+          name: 'Halbes Hähnchen',
+          isAvailable: true,
+        },
+        include: {
+          optionGroups: {
+            include: {
+              options: {
+                include: {
+                  optionProduct: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const selectedOption = product.optionGroups
+        .flatMap((group) => group.options)
+        .find((option) => option.optionProduct.isAvailable);
+
+      if (!selectedOption) {
+        throw new Error(
+          'Für den Test wurde kein verfügbares Optionsprodukt gefunden.',
+        );
+      }
+
+      const originalAvailability = selectedOption.optionProduct.isAvailable;
+
+      try {
+        await prisma.product.update({
+          where: {
+            id: selectedOption.optionProductId,
+          },
+          data: {
+            isAvailable: false,
+          },
+        });
+
+        const response = await request(app.getHttpServer())
+          .get(`/api/v1/products/${product.id}`)
+          .expect(200);
+
+        const returnedProductIds = response.body.optionGroups.flatMap(
+          (group: { options: Array<{ productId: number }> }) =>
+            group.options.map((option) => option.productId),
+        );
+
+        expect(returnedProductIds).not.toContain(
+          selectedOption.optionProductId,
+        );
+      } finally {
+        await prisma.product.update({
+          where: {
+            id: selectedOption.optionProductId,
+          },
+          data: {
+            isAvailable: originalAvailability,
+          },
+        });
+      }
+    });
+
+    it('liefert Empfehlungen sortiert und filtert deaktivierte Empfehlungen', async () => {
+      const category = await prisma.productCategory.findFirstOrThrow({
+        orderBy: {
+          id: 'asc',
+        },
+      });
+
+      const testSuffix = `${Date.now()}-${crypto.randomUUID()}`;
+
+      const mainProduct = await prisma.product.create({
+        data: {
+          categoryId: category.id,
+          name: `E2E Hauptprodukt ${testSuffix}`,
+          price: '10.00',
+          isAvailable: true,
+        },
+      });
+
+      const firstRecommendation = await prisma.product.create({
+        data: {
+          categoryId: category.id,
+          name: `E2E Empfehlung 1 ${testSuffix}`,
+          price: '2.50',
+          isAvailable: true,
+        },
+      });
+
+      const secondRecommendation = await prisma.product.create({
+        data: {
+          categoryId: category.id,
+          name: `E2E Empfehlung 2 ${testSuffix}`,
+          price: '3.75',
+          isAvailable: true,
+        },
+      });
+
+      const disabledRecommendation = await prisma.product.create({
+        data: {
+          categoryId: category.id,
+          name: `E2E Empfehlung inaktiv ${testSuffix}`,
+          price: '4.00',
+          isAvailable: false,
+        },
+      });
+
+      const createdProductIds = [
+        mainProduct.id,
+        firstRecommendation.id,
+        secondRecommendation.id,
+        disabledRecommendation.id,
+      ];
+
+      try {
+        await prisma.productRecommendation.createMany({
+          data: [
+            {
+              productId: mainProduct.id,
+              recommendedProductId: firstRecommendation.id,
+              sortOrder: 20,
+            },
+            {
+              productId: mainProduct.id,
+              recommendedProductId: secondRecommendation.id,
+              sortOrder: 10,
+            },
+            {
+              productId: mainProduct.id,
+              recommendedProductId: disabledRecommendation.id,
+              sortOrder: 5,
+            },
+          ],
+        });
+
+        const response = await request(app.getHttpServer())
+          .get(`/api/v1/products/${mainProduct.id}`)
+          .expect(200);
+
+        expect(
+          response.body.recommendations.map(
+            (recommendation: { id: number }) => recommendation.id,
+          ),
+        ).toEqual([secondRecommendation.id, firstRecommendation.id]);
+
+        expect(
+          response.body.recommendations.map(
+            (recommendation: { id: number }) => recommendation.id,
+          ),
+        ).not.toContain(disabledRecommendation.id);
+
+        expect(response.body.recommendations[0]).toMatchObject({
+          id: secondRecommendation.id,
+          name: secondRecommendation.name,
+          price: '3.75',
+          category: {
+            id: category.id,
+            name: category.name,
+          },
+        });
+
+        for (const recommendation of response.body.recommendations) {
+          expect(recommendation.price).toMatch(/^\d+\.\d{2}$/);
+        }
+      } finally {
+        await prisma.productRecommendation.deleteMany({
+          where: {
+            productId: mainProduct.id,
+          },
+        });
+
+        await prisma.product.deleteMany({
+          where: {
+            id: {
+              in: createdProductIds,
+            },
+          },
+        });
+      }
+    });
+
+    it('liefert für eine ungültige Produkt-ID 400', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/products/abc')
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+      });
+    });
+
+    it('liefert für eine unbekannte Produkt-ID 404', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/products/2147483647')
+        .expect(404);
+
+      expect(response.body).toMatchObject({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Produkt wurde nicht gefunden.',
+      });
+    });
+
+    it('liefert für ein deaktiviertes Produkt 404', async () => {
+      const product = await prisma.product.findFirstOrThrow({
+        where: {
+          name: 'Halbes Hähnchen',
+          isAvailable: true,
+        },
+      });
+
+      const originalAvailability = product.isAvailable;
+
+      try {
+        await prisma.product.update({
+          where: {
+            id: product.id,
+          },
+          data: {
+            isAvailable: false,
+          },
+        });
+
+        const response = await request(app.getHttpServer())
+          .get(`/api/v1/products/${product.id}`)
+          .expect(404);
+
+        expect(response.body).toMatchObject({
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'Produkt wurde nicht gefunden.',
+        });
+      } finally {
+        await prisma.product.update({
+          where: {
+            id: product.id,
+          },
+          data: {
+            isAvailable: originalAvailability,
+          },
+        });
+      }
+    });
+  });
+
   it('/api/v1/carts/:cartId/items/:itemId (PATCH) ändert die Menge einer Position', async () => {
     const { product, optionIds } = await getConfiguredProduct();
 
