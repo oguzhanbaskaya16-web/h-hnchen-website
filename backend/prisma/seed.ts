@@ -505,7 +505,7 @@ async function main(): Promise<void> {
     update: {
       name: 'Beilage',
       minSelections: 0,
-      maxSelections: 1,
+      maxSelections: 2,
       sortOrder: 1,
     },
     create: {
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
       name: 'Beilage',
       optionType: 'SIDE',
       minSelections: 0,
-      maxSelections: 1,
+      maxSelections: 2,
       sortOrder: 1,
     },
   });
