@@ -6,168 +6,301 @@ import ProductDialog, {
   type WarenkorbAuswahl,
 } from "@/components/ProductDialog";
 import {
-  formatierePreis,
-  kategorien,
-  produkte,
-  type Produkt,
-} from "@/data/products";
+  ApiError,
+  addCartItem,
+  clearCart,
+  createCart,
+  formatPrice,
+  getCart,
+  getMenu,
+  removeCartItem,
+  updateCartItem,
+  type Cart,
+  type MenuCategory,
+  type MenuProduct,
+} from "@/lib/api";
 import styles from "./speisekarte.module.css";
+import { useRouter } from "next/navigation";
 
 type KategorieFilter = "alle" | "highlights" | number;
 
-type WarenkorbOption = {
-  produktoption_id: number;
-  name: string;
-  aufpreis: number;
-};
-
-type WarenkorbPosition = {
-  clientId: string;
-  produkt_id: number;
-  name: string;
-  menge: number;
-  einzelpreis: number;
-  optionen: WarenkorbOption[];
-};
-
-const WARENKORB_SPEICHER = "palmen-grill-warenkorb";
-const WARENKORB_EVENT = "palmen-warenkorb-aktualisiert";
-
-function berechnePositionssumme(position: WarenkorbPosition) {
-  const optionspreis = position.optionen.reduce(
-    (summe, option) => summe + option.aufpreis,
-    0,
-  );
-
-  return (position.einzelpreis + optionspreis) * position.menge;
-}
-
-function istWarenkorbPosition(wert: unknown): wert is WarenkorbPosition {
-  if (typeof wert !== "object" || wert === null) {
-    return false;
-  }
-
-  const position = wert as Partial<WarenkorbPosition>;
-
-  return (
-    typeof position.clientId === "string" &&
-    typeof position.produkt_id === "number" &&
-    typeof position.name === "string" &&
-    typeof position.menge === "number" &&
-    typeof position.einzelpreis === "number" &&
-    Array.isArray(position.optionen)
-  );
-}
+const CART_ID_SPEICHER = "palmen-grill-cart-id";
 
 export default function SpeisekartePage() {
+  const router = useRouter();
+
   const [aktiveKategorie, setAktiveKategorie] =
     useState<KategorieFilter>("alle");
   const [suchbegriff, setSuchbegriff] = useState("");
   const [ausgewaehltesProdukt, setAusgewaehltesProdukt] =
-    useState<Produkt | null>(null);
-  const [warenkorb, setWarenkorb] = useState<WarenkorbPosition[]>([]);
+    useState<MenuProduct | null>(null);
+  const [kategorien, setKategorien] = useState<MenuCategory[]>([]);
+  const [menuLaedt, setMenuLaedt] = useState(true);
+  const [menuFehler, setMenuFehler] = useState<string | null>(null);
+  const [cartId, setCartId] = useState<string | null>(null);
+  const [warenkorb, setWarenkorb] = useState<Cart | null>(null);
   const [warenkorbGeladen, setWarenkorbGeladen] = useState(false);
+  const [warenkorbMutationLaeuft, setWarenkorbMutationLaeuft] = useState(false);
+  const [warenkorbFehler, setWarenkorbFehler] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const gespeicherterWarenkorb =
-        window.localStorage.getItem(WARENKORB_SPEICHER);
+    let aktiv = true;
 
-      if (!gespeicherterWarenkorb) {
-        return;
+    async function menuLaden() {
+      try {
+        setMenuLaedt(true);
+        setMenuFehler(null);
+
+        const menu = await getMenu();
+
+        if (aktiv) {
+          setKategorien(menu.categories);
+        }
+      } catch (error) {
+        if (aktiv) {
+          setMenuFehler(
+            error instanceof Error
+              ? error.message
+              : "Die Speisekarte konnte nicht geladen werden.",
+          );
+        }
+      } finally {
+        if (aktiv) {
+          setMenuLaedt(false);
+        }
       }
-
-      const gespeicherteDaten: unknown = JSON.parse(gespeicherterWarenkorb);
-
-      if (!Array.isArray(gespeicherteDaten)) {
-        window.localStorage.removeItem(WARENKORB_SPEICHER);
-        return;
-      }
-
-      setWarenkorb(gespeicherteDaten.filter(istWarenkorbPosition));
-    } catch {
-      window.localStorage.removeItem(WARENKORB_SPEICHER);
-    } finally {
-      setWarenkorbGeladen(true);
     }
+
+    void menuLaden();
+
+    return () => {
+      aktiv = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (!warenkorbGeladen) {
-      return;
+    let aktiv = true;
+
+    async function backendCartInitialisieren() {
+      try {
+        setWarenkorbGeladen(false);
+        setWarenkorbFehler(null);
+
+        const gespeicherteCartId =
+          window.localStorage.getItem(CART_ID_SPEICHER);
+
+        if (gespeicherteCartId) {
+          try {
+            const vorhandenerCart = await getCart(gespeicherteCartId);
+
+            if (!aktiv) {
+              return;
+            }
+
+            setCartId(vorhandenerCart.cartId);
+            setWarenkorb(vorhandenerCart);
+            return;
+          } catch (error) {
+            if (!(error instanceof ApiError) || error.status !== 404) {
+              throw error;
+            }
+
+            window.localStorage.removeItem(CART_ID_SPEICHER);
+          }
+        }
+
+        const neuerCart = await createCart();
+
+        if (!aktiv) {
+          return;
+        }
+
+        window.localStorage.setItem(CART_ID_SPEICHER, neuerCart.cartId);
+        setCartId(neuerCart.cartId);
+        setWarenkorb(neuerCart);
+      } catch (error) {
+        if (!aktiv) {
+          return;
+        }
+
+        setWarenkorbFehler(
+          error instanceof Error
+            ? error.message
+            : "Der Warenkorb konnte nicht initialisiert werden.",
+        );
+      } finally {
+        if (aktiv) {
+          setWarenkorbGeladen(true);
+        }
+      }
     }
 
-    window.localStorage.setItem(WARENKORB_SPEICHER, JSON.stringify(warenkorb));
-    window.dispatchEvent(new Event(WARENKORB_EVENT));
-  }, [warenkorb, warenkorbGeladen]);
+    void backendCartInitialisieren();
+
+    return () => {
+      aktiv = false;
+    };
+  }, []);
+
+  const produkte = useMemo(
+    () =>
+      kategorien.flatMap((kategorie) =>
+        kategorie.products.map((produkt) => ({
+          produkt,
+          kategorieId: kategorie.id,
+        })),
+      ),
+    [kategorien],
+  );
 
   const sichtbareProdukte = useMemo(() => {
     const suche = suchbegriff.trim().toLowerCase();
 
-    return produkte.filter((produkt) => {
-      const passtZurKategorie =
-        aktiveKategorie === "alle" ||
-        (aktiveKategorie === "highlights" && produkt.ist_highlight) ||
-        produkt.kategorie_id === aktiveKategorie;
+    return produkte
+      .filter(({ produkt, kategorieId }) => {
+        const passtZurKategorie =
+          aktiveKategorie === "alle" ||
+          (aktiveKategorie === "highlights" && produkt.isHighlight) ||
+          kategorieId === aktiveKategorie;
 
-      const passtZurSuche =
-        suche.length === 0 ||
-        produkt.name.toLowerCase().includes(suche) ||
-        produkt.kurzbeschreibung.toLowerCase().includes(suche) ||
-        produkt.beschreibung.toLowerCase().includes(suche);
+        const suchtext = [
+          produkt.name,
+          produkt.shortDescription,
+          produkt.description,
+        ]
+          .filter((wert): wert is string => Boolean(wert))
+          .join(" ")
+          .toLowerCase();
 
-      return passtZurKategorie && passtZurSuche;
-    });
-  }, [aktiveKategorie, suchbegriff]);
+        return (
+          passtZurKategorie && (suche.length === 0 || suchtext.includes(suche))
+        );
+      })
+      .map(({ produkt }) => produkt);
+  }, [aktiveKategorie, produkte, suchbegriff]);
 
-  const zwischensumme = useMemo(
-    () =>
-      warenkorb.reduce(
-        (summe, position) => summe + berechnePositionssumme(position),
-        0,
-      ),
-    [warenkorb],
-  );
+  const zwischensumme = warenkorb ? Number.parseFloat(warenkorb.total) : 0;
 
-  const artikelanzahl = useMemo(
-    () => warenkorb.reduce((summe, position) => summe + position.menge, 0),
-    [warenkorb],
-  );
+  const artikelanzahl =
+    warenkorb?.items.reduce(
+      (summe, position) => summe + position.quantity,
+      0,
+    ) ?? 0;
 
-  function produktAuswaehlen(produkt: Produkt) {
+  function produktAuswaehlen(produkt: MenuProduct) {
     setAusgewaehltesProdukt(produkt);
   }
 
-  function zumWarenkorbHinzufuegen(auswahl: WarenkorbAuswahl) {
-    const neuePosition: WarenkorbPosition = {
-      clientId: crypto.randomUUID(),
-      produkt_id: auswahl.produkt.produkt_id,
-      name: auswahl.produkt.name,
-      menge: auswahl.menge,
-      einzelpreis: auswahl.produkt.preis,
-      optionen: auswahl.optionen,
-    };
+  async function zumWarenkorbHinzufuegen(auswahl: WarenkorbAuswahl) {
+    if (!cartId || warenkorbMutationLaeuft) {
+      return;
+    }
 
-    setWarenkorb((aktuellePositionen) => [...aktuellePositionen, neuePosition]);
+    try {
+      setWarenkorbMutationLaeuft(true);
+      setWarenkorbFehler(null);
+
+      const aktualisierterCart = await addCartItem(cartId, {
+        productId: auswahl.produkt.id,
+        quantity: auswahl.menge,
+        optionIds: auswahl.optionen.map((option) => option.produktoption_id),
+      });
+
+      setWarenkorb(aktualisierterCart);
+    } catch (error) {
+      setWarenkorbFehler(
+        error instanceof Error
+          ? error.message
+          : "Das Produkt konnte nicht zum Warenkorb hinzugefügt werden.",
+      );
+    } finally {
+      setWarenkorbMutationLaeuft(false);
+    }
   }
 
-  function mengeAendern(clientId: string, veraenderung: number) {
-    setWarenkorb((aktuellePositionen) =>
-      aktuellePositionen.map((position) =>
-        position.clientId === clientId
-          ? {
-              ...position,
-              menge: Math.max(1, Math.min(20, position.menge + veraenderung)),
-            }
-          : position,
-      ),
-    );
+  async function mengeAendern(
+    itemId: number,
+    aktuelleMenge: number,
+    veraenderung: number,
+  ) {
+    if (!cartId || warenkorbMutationLaeuft) {
+      return;
+    }
+
+    const neueMenge = aktuelleMenge + veraenderung;
+
+    if (neueMenge < 1 || neueMenge > 99) {
+      return;
+    }
+
+    try {
+      setWarenkorbMutationLaeuft(true);
+      setWarenkorbFehler(null);
+
+      const aktualisierterCart = await updateCartItem(cartId, itemId, {
+        quantity: neueMenge,
+      });
+
+      setWarenkorb(aktualisierterCart);
+    } catch (error) {
+      setWarenkorbFehler(
+        error instanceof Error
+          ? error.message
+          : "Die Menge konnte nicht geändert werden.",
+      );
+    } finally {
+      setWarenkorbMutationLaeuft(false);
+    }
   }
 
-  function positionEntfernen(clientId: string) {
-    setWarenkorb((aktuellePositionen) =>
-      aktuellePositionen.filter((position) => position.clientId !== clientId),
-    );
+  async function positionEntfernen(itemId: number) {
+    if (!cartId || warenkorbMutationLaeuft) {
+      return;
+    }
+
+    try {
+      setWarenkorbMutationLaeuft(true);
+      setWarenkorbFehler(null);
+
+      const aktualisierterCart = await removeCartItem(cartId, itemId);
+
+      setWarenkorb(aktualisierterCart);
+    } catch (error) {
+      setWarenkorbFehler(
+        error instanceof Error
+          ? error.message
+          : "Das Produkt konnte nicht entfernt werden.",
+      );
+    } finally {
+      setWarenkorbMutationLaeuft(false);
+    }
+  }
+
+  async function warenkorbLeeren() {
+    if (
+      !cartId ||
+      warenkorbMutationLaeuft ||
+      (warenkorb?.items.length ?? 0) === 0
+    ) {
+      return;
+    }
+
+    try {
+      setWarenkorbMutationLaeuft(true);
+      setWarenkorbFehler(null);
+
+      const geleerterCart = await clearCart(cartId);
+
+      setWarenkorb(geleerterCart);
+    } catch (error) {
+      setWarenkorbFehler(
+        error instanceof Error
+          ? error.message
+          : "Der Warenkorb konnte nicht geleert werden.",
+      );
+    } finally {
+      setWarenkorbMutationLaeuft(false);
+    }
   }
 
   return (
@@ -210,6 +343,7 @@ export default function SpeisekartePage() {
           >
             Alle
           </button>
+
           <button
             type="button"
             className={
@@ -223,13 +357,11 @@ export default function SpeisekartePage() {
           {kategorien.map((kategorie) => (
             <button
               type="button"
-              key={kategorie.kategorie_id}
+              key={kategorie.id}
               className={
-                aktiveKategorie === kategorie.kategorie_id
-                  ? styles.activeCategory
-                  : ""
+                aktiveKategorie === kategorie.id ? styles.activeCategory : ""
               }
-              onClick={() => setAktiveKategorie(kategorie.kategorie_id)}
+              onClick={() => setAktiveKategorie(kategorie.id)}
             >
               {kategorie.name}
             </button>
@@ -248,22 +380,35 @@ export default function SpeisekartePage() {
                   : aktiveKategorie === "highlights"
                     ? "Unsere Palmen-Tipps"
                     : kategorien.find(
-                        (kategorie) =>
-                          kategorie.kategorie_id === aktiveKategorie,
+                        (kategorie) => kategorie.id === aktiveKategorie,
                       )?.name}
               </h2>
             </div>
+
             <span>
               {sichtbareProdukte.length}{" "}
               {sichtbareProdukte.length === 1 ? "Gericht" : "Gerichte"}
             </span>
           </div>
 
-          {sichtbareProdukte.length > 0 ? (
+          {menuLaedt ? (
+            <div className={styles.emptyResults}>
+              <h3>Speisekarte wird geladen …</h3>
+              <p>Die aktuellen Gerichte werden vom Restaurant abgerufen.</p>
+            </div>
+          ) : menuFehler ? (
+            <div className={styles.emptyResults}>
+              <h3>Speisekarte konnte nicht geladen werden</h3>
+              <p>{menuFehler}</p>
+              <button type="button" onClick={() => window.location.reload()}>
+                Erneut versuchen
+              </button>
+            </div>
+          ) : sichtbareProdukte.length > 0 ? (
             <div className={styles.productGrid}>
               {sichtbareProdukte.map((produkt) => (
                 <ProductCard
-                  key={produkt.produkt_id}
+                  key={produkt.id}
                   produkt={produkt}
                   onSelect={produktAuswaehlen}
                 />
@@ -303,37 +448,39 @@ export default function SpeisekartePage() {
             </div>
           </div>
 
+          {warenkorbFehler && (
+            <div className={styles.emptyCart}>
+              <p>{warenkorbFehler}</p>
+            </div>
+          )}
+
           <div className={styles.cartBody} aria-live="polite">
             {!warenkorbGeladen ? (
               <div className={styles.emptyCart}>
                 <p>Warenkorb wird geladen …</p>
               </div>
-            ) : warenkorb.length > 0 ? (
+            ) : (warenkorb?.items.length ?? 0) > 0 ? (
               <div className={styles.cartItems}>
-                {warenkorb.map((position) => (
-                  <article className={styles.cartItem} key={position.clientId}>
+                {warenkorb?.items.map((position) => (
+                  <article className={styles.cartItem} key={position.itemId}>
                     <div className={styles.cartItemHeader}>
                       <div>
-                        <h3>{position.name}</h3>
+                        <h3>{position.product.name}</h3>
                         <span>
-                          {position.menge} ×{" "}
-                          {formatierePreis(position.einzelpreis)}
+                          {position.quantity} ×{" "}
+                          {formatPrice(position.baseUnitPrice)}
                         </span>
                       </div>
-                      <strong>
-                        {formatierePreis(berechnePositionssumme(position))}
-                      </strong>
+                      <strong>{formatPrice(position.lineTotal)}</strong>
                     </div>
 
-                    {position.optionen.length > 0 && (
+                    {position.options.length > 0 && (
                       <ul className={styles.cartOptions}>
-                        {position.optionen.map((option) => (
-                          <li key={option.produktoption_id}>
+                        {position.options.map((option) => (
+                          <li key={option.id}>
                             <span>{option.name}</span>
-                            {option.aufpreis > 0 && (
-                              <small>
-                                + {formatierePreis(option.aufpreis)}
-                              </small>
+                            {Number.parseFloat(option.surcharge) > 0 && (
+                              <small>+ {formatPrice(option.surcharge)}</small>
                             )}
                           </li>
                         ))}
@@ -343,22 +490,30 @@ export default function SpeisekartePage() {
                     <div className={styles.cartItemFooter}>
                       <div
                         className={styles.cartQuantity}
-                        aria-label={`Menge für ${position.name}`}
+                        aria-label={`Menge für ${position.product.name}`}
                       >
                         <button
                           type="button"
-                          disabled={position.menge === 1}
-                          onClick={() => mengeAendern(position.clientId, -1)}
-                          aria-label={`Menge von ${position.name} verringern`}
+                          disabled={
+                            position.quantity <= 1 || warenkorbMutationLaeuft
+                          }
+                          onClick={() =>
+                            mengeAendern(position.itemId, position.quantity, -1)
+                          }
+                          aria-label={`Menge von ${position.product.name} verringern`}
                         >
                           −
                         </button>
-                        <span>{position.menge}</span>
+                        <span>{position.quantity}</span>
                         <button
                           type="button"
-                          disabled={position.menge === 20}
-                          onClick={() => mengeAendern(position.clientId, 1)}
-                          aria-label={`Menge von ${position.name} erhöhen`}
+                          disabled={
+                            position.quantity >= 99 || warenkorbMutationLaeuft
+                          }
+                          onClick={() =>
+                            mengeAendern(position.itemId, position.quantity, 1)
+                          }
+                          aria-label={`Menge von ${position.product.name} erhöhen`}
                         >
                           +
                         </button>
@@ -367,8 +522,9 @@ export default function SpeisekartePage() {
                       <button
                         type="button"
                         className={styles.removeItem}
-                        onClick={() => positionEntfernen(position.clientId)}
-                        aria-label={`${position.name} aus dem Warenkorb entfernen`}
+                        disabled={warenkorbMutationLaeuft}
+                        onClick={() => positionEntfernen(position.itemId)}
+                        aria-label={`${position.product.name} aus dem Warenkorb entfernen`}
                       >
                         Entfernen
                       </button>
@@ -389,17 +545,29 @@ export default function SpeisekartePage() {
             <div className={styles.cartSummary}>
               <span>
                 Zwischensumme
-                {artikelanzahl > 0 && (
-                  <small>
-                    {artikelanzahl}{" "}
-                    {artikelanzahl === 1 ? "Artikel" : "Artikel"}
-                  </small>
-                )}
+                {artikelanzahl > 0 && <small>{artikelanzahl} Artikel</small>}
               </span>
-              <strong>{formatierePreis(zwischensumme)}</strong>
+              <strong>{formatPrice(zwischensumme)}</strong>
             </div>
 
-            <button type="button" disabled={warenkorb.length === 0}>
+            {(warenkorb?.items.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className={styles.removeItem}
+                disabled={warenkorbMutationLaeuft}
+                onClick={warenkorbLeeren}
+              >
+                Warenkorb leeren
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={
+                (warenkorb?.items.length ?? 0) === 0 || warenkorbMutationLaeuft
+              }
+              onClick={() => router.push("/checkout")}
+            >
               Zur Kasse
               <span aria-hidden="true">→</span>
             </button>

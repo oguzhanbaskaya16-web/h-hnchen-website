@@ -2,23 +2,12 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import {
-  findeProdukt,
-  formatierePreis,
-  produktoptionen,
-  type Produkt,
-} from "@/data/products";
+import type { MenuOption, MenuOptionGroup, MenuProduct } from "@/lib/api";
+import { formatPrice } from "@/lib/api";
 import styles from "./ProductDialog.module.css";
 
-type ProduktoptionEintrag = (typeof produktoptionen)[number];
-
-type OptionDetail = {
-  verknuepfung: ProduktoptionEintrag;
-  optionsprodukt: Produkt;
-};
-
 export type WarenkorbAuswahl = {
-  produkt: Produkt;
+  produkt: MenuProduct;
   optionen: {
     produktoption_id: number;
     name: string;
@@ -29,92 +18,74 @@ export type WarenkorbAuswahl = {
 };
 
 type ProductDialogProps = {
-  produkt: Produkt | null;
+  produkt: MenuProduct | null;
   onClose: () => void;
   onAdd: (auswahl: WarenkorbAuswahl) => void;
 };
 
-const gruppenNamen: Record<string, string> = {
-  beilage: "Beilage wählen",
-  sauce: "Saucen wählen",
-  extra: "Extras wählen",
-  getraenk: "Getränk wählen",
-};
+const FALLBACK_IMAGE = "/images/palmen-grill-hero.png";
+
+function gruppenHinweis(gruppe: MenuOptionGroup): string {
+  if (gruppe.minSelections === gruppe.maxSelections) {
+    return gruppe.maxSelections === 1
+      ? "Eine Auswahl erforderlich"
+      : `${gruppe.maxSelections} Auswahlen erforderlich`;
+  }
+
+  if (gruppe.minSelections === 0) {
+    return gruppe.maxSelections === 1
+      ? "Optional · maximal eine Auswahl"
+      : `Optional · bis zu ${gruppe.maxSelections} Auswahlen`;
+  }
+
+  return `${gruppe.minSelections} bis ${gruppe.maxSelections} Auswahlen`;
+}
 
 export default function ProductDialog({
   produkt,
   onClose,
   onAdd,
 }: ProductDialogProps) {
-  const [ausgewaehlteIds, setAusgewaehlteIds] = useState<number[]>(
-    [],
-  );
+  const [ausgewaehlteIds, setAusgewaehlteIds] = useState<number[]>([]);
   const [menge, setMenge] = useState(1);
 
-  const optionDetails = useMemo<OptionDetail[]>(() => {
-    if (!produkt) {
-      return [];
-    }
+  const optionenNachId = useMemo(() => {
+    const eintraege = produkt?.optionGroups.flatMap((gruppe) =>
+      gruppe.options.map((option) => [option.id, option] as const),
+    );
 
-    return produktoptionen
-      .filter(
-        (option) =>
-          option.hauptprodukt_id === produkt.produkt_id,
-      )
-      .flatMap((verknuepfung) => {
-        const optionsprodukt = findeProdukt(
-          verknuepfung.optionsprodukt_id,
-        );
-
-        if (!optionsprodukt) {
-          return [];
-        }
-
-        return [
-          {
-            verknuepfung,
-            optionsprodukt,
-          },
-        ];
-      });
+    return new Map(eintraege ?? []);
   }, [produkt]);
 
-  const gruppierteOptionen = useMemo(() => {
-    return optionDetails.reduce<Record<string, OptionDetail[]>>(
-      (gruppen, eintrag) => {
-        const optionstyp = eintrag.verknuepfung.optionstyp;
-
-        if (!gruppen[optionstyp]) {
-          gruppen[optionstyp] = [];
-        }
-
-        gruppen[optionstyp].push(eintrag);
-        return gruppen;
-      },
-      {},
-    );
-  }, [optionDetails]);
-
-  const ausgewaehlteOptionen = optionDetails.filter((eintrag) =>
-    ausgewaehlteIds.includes(
-      eintrag.verknuepfung.produktoption_id,
-    ),
+  const ausgewaehlteOptionen = useMemo(
+    () =>
+      ausgewaehlteIds
+        .map((id) => optionenNachId.get(id))
+        .filter((option): option is MenuOption => Boolean(option)),
+    [ausgewaehlteIds, optionenNachId],
   );
 
   const optionspreis = ausgewaehlteOptionen.reduce(
-    (summe, eintrag) =>
-      summe + eintrag.verknuepfung.aufpreis,
+    (summe, option) => summe + Number.parseFloat(option.surcharge),
     0,
   );
 
-  const gesamtpreis = produkt
-    ? (produkt.preis + optionspreis) * menge
-    : 0;
+  const grundpreis = produkt ? Number.parseFloat(produkt.price) : 0;
+  const gesamtpreis = (grundpreis + optionspreis) * menge;
+
+  const auswahlGueltig =
+    produkt?.optionGroups.every((gruppe) => {
+      const anzahl = gruppe.options.filter((option) =>
+        ausgewaehlteIds.includes(option.id),
+      ).length;
+
+      return anzahl >= gruppe.minSelections && anzahl <= gruppe.maxSelections;
+    }) ?? false;
 
   useEffect(() => {
     setAusgewaehlteIds([]);
     setMenge(1);
-  }, [produkt?.produkt_id]);
+  }, [produkt?.id]);
 
   useEffect(() => {
     if (!produkt) {
@@ -128,19 +99,12 @@ export default function ProductDialog({
     }
 
     const bisherigerOverflow = document.body.style.overflow;
-
     document.body.style.overflow = "hidden";
-    window.addEventListener(
-      "keydown",
-      dialogMitEscapeSchliessen,
-    );
+    window.addEventListener("keydown", dialogMitEscapeSchliessen);
 
     return () => {
       document.body.style.overflow = bisherigerOverflow;
-      window.removeEventListener(
-        "keydown",
-        dialogMitEscapeSchliessen,
-      );
+      window.removeEventListener("keydown", dialogMitEscapeSchliessen);
     };
   }, [produkt, onClose]);
 
@@ -148,62 +112,50 @@ export default function ProductDialog({
     return null;
   }
 
-  function optionAuswaehlen(eintrag: OptionDetail) {
-    const {
-      produktoption_id,
-      optionstyp,
-      mehrfachauswahl,
-    } = eintrag.verknuepfung;
-
+  function optionAuswaehlen(gruppe: MenuOptionGroup, option: MenuOption) {
     setAusgewaehlteIds((aktuelleIds) => {
-      const istAusgewaehlt =
-        aktuelleIds.includes(produktoption_id);
+      const istAusgewaehlt = aktuelleIds.includes(option.id);
 
-      if (mehrfachauswahl) {
-        return istAusgewaehlt
-          ? aktuelleIds.filter(
-              (id) => id !== produktoption_id,
-            )
-          : [...aktuelleIds, produktoption_id];
+      if (istAusgewaehlt) {
+        return aktuelleIds.filter((id) => id !== option.id);
       }
 
-      const idsOhneDieseGruppe = aktuelleIds.filter(
-        (id) => {
-          const vorhandeneOption = optionDetails.find(
-            (option) =>
-              option.verknuepfung.produktoption_id === id,
-          );
-
-          return (
-            vorhandeneOption?.verknuepfung.optionstyp !==
-            optionstyp
-          );
-        },
+      const gruppenIds = new Set(
+        gruppe.options.map((gruppenOption) => gruppenOption.id),
       );
 
-      return [...idsOhneDieseGruppe, produktoption_id];
+      const bereitsInGruppe = aktuelleIds.filter((id) => gruppenIds.has(id));
+
+      if (gruppe.maxSelections === 1) {
+        return [...aktuelleIds.filter((id) => !gruppenIds.has(id)), option.id];
+      }
+
+      if (bereitsInGruppe.length >= gruppe.maxSelections) {
+        return aktuelleIds;
+      }
+
+      return [...aktuelleIds, option.id];
     });
   }
 
   function zumWarenkorbHinzufuegen() {
-  if (!produkt) {
-    return;
+    if (!produkt || !auswahlGueltig) {
+      return;
+    }
+
+    onAdd({
+      produkt,
+      optionen: ausgewaehlteOptionen.map((option) => ({
+        produktoption_id: option.id,
+        name: option.name,
+        aufpreis: Number.parseFloat(option.surcharge),
+      })),
+      menge,
+      gesamtpreis,
+    });
+
+    onClose();
   }
-
-  onAdd({
-    produkt,
-    optionen: ausgewaehlteOptionen.map((eintrag) => ({
-      produktoption_id:
-        eintrag.verknuepfung.produktoption_id,
-      name: eintrag.optionsprodukt.name,
-      aufpreis: eintrag.verknuepfung.aufpreis,
-    })),
-    menge,
-    gesamtpreis,
-  });
-
-  onClose();
-}
 
   return (
     <div
@@ -231,131 +183,76 @@ export default function ProductDialog({
 
         <div className={styles.productImage}>
           <Image
-            src={produkt.bild}
+            src={produkt.image ?? FALLBACK_IMAGE}
             alt={produkt.name}
             fill
             sizes="(max-width: 700px) 100vw, 440px"
             className={styles.image}
           />
 
-          {produkt.ist_highlight && (
-            <span className={styles.highlight}>
-              Palmen-Tipp
-            </span>
+          {produkt.isHighlight && (
+            <span className={styles.highlight}>Palmen-Tipp</span>
           )}
         </div>
 
         <div className={styles.content}>
           <header className={styles.header}>
             <p>DEINE AUSWAHL</p>
-
-            <h2 id="product-dialog-title">
-              {produkt.name}
-            </h2>
+            <h2 id="product-dialog-title">{produkt.name}</h2>
 
             <span className={styles.basePrice}>
-              {formatierePreis(produkt.preis)}
+              {formatPrice(produkt.price)}
             </span>
 
             <p className={styles.description}>
-              {produkt.beschreibung}
+              {produkt.description ?? produkt.shortDescription ?? ""}
             </p>
 
-            {produkt.allergenhinweis && (
+            {produkt.allergenInformation && (
               <p className={styles.allergen}>
-                <strong>Allergene:</strong>{" "}
-                {produkt.allergenhinweis}
+                <strong>Allergene:</strong> {produkt.allergenInformation}
               </p>
             )}
           </header>
 
-          {Object.entries(gruppierteOptionen).map(
-            ([optionstyp, eintraege]) => {
-              const mehrfachauswahl =
-                eintraege[0]?.verknuepfung
-                  .mehrfachauswahl ?? false;
+          {produkt.optionGroups.map((gruppe) => (
+            <fieldset className={styles.optionGroup} key={gruppe.id}>
+              <legend>
+                <span>{gruppe.name}</span>
+                <small>{gruppenHinweis(gruppe)}</small>
+              </legend>
 
-              return (
-                <fieldset
-                  className={styles.optionGroup}
-                  key={optionstyp}
-                >
-                  <legend>
-                    <span>
-                      {gruppenNamen[optionstyp] ??
-                        optionstyp}
-                    </span>
+              <div className={styles.optionList}>
+                {gruppe.options.map((option) => {
+                  const istAusgewaehlt = ausgewaehlteIds.includes(option.id);
 
-                    <small>
-                      {mehrfachauswahl
-                        ? "Mehrfachauswahl möglich"
-                        : "Eine Auswahl möglich"}
-                    </small>
-                  </legend>
+                  return (
+                    <label
+                      className={`${styles.option} ${
+                        istAusgewaehlt ? styles.selectedOption : ""
+                      }`}
+                      key={option.id}
+                    >
+                      <input
+                        type="checkbox"
+                        name={`option-${gruppe.id}`}
+                        checked={istAusgewaehlt}
+                        onChange={() => optionAuswaehlen(gruppe, option)}
+                      />
 
-                  <div className={styles.optionList}>
-                    {eintraege.map((eintrag) => {
-                      const optionId =
-                        eintrag.verknuepfung
-                          .produktoption_id;
+                      <span className={styles.optionName}>{option.name}</span>
 
-                      const istAusgewaehlt =
-                        ausgewaehlteIds.includes(optionId);
-
-                      return (
-                        <label
-                          className={`${styles.option} ${
-                            istAusgewaehlt
-                              ? styles.selectedOption
-                              : ""
-                          }`}
-                          key={optionId}
-                        >
-                          <input
-                            type={
-                              mehrfachauswahl
-                                ? "checkbox"
-                                : "radio"
-                            }
-                            name={`option-${optionstyp}`}
-                            checked={istAusgewaehlt}
-                            onChange={() =>
-                              optionAuswaehlen(eintrag)
-                            }
-                          />
-
-                          <span className={styles.optionName}>
-                            {
-                              eintrag.optionsprodukt
-                                .name
-                            }
-
-                            <small>
-                              {
-                                eintrag.optionsprodukt
-                                  .kurzbeschreibung
-                              }
-                            </small>
-                          </span>
-
-                          <strong>
-                            {eintrag.verknuepfung
-                              .aufpreis === 0
-                              ? "inklusive"
-                              : `+ ${formatierePreis(
-                                  eintrag
-                                    .verknuepfung
-                                    .aufpreis,
-                                )}`}
-                          </strong>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              );
-            },
-          )}
+                      <strong>
+                        {Number.parseFloat(option.surcharge) === 0
+                          ? "inklusive"
+                          : `+ ${formatPrice(option.surcharge)}`}
+                      </strong>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
 
           <div className={styles.quantitySection}>
             <div>
@@ -366,11 +263,7 @@ export default function ProductDialog({
             <div className={styles.quantity}>
               <button
                 type="button"
-                onClick={() =>
-                  setMenge((aktuell) =>
-                    Math.max(1, aktuell - 1),
-                  )
-                }
+                onClick={() => setMenge((aktuell) => Math.max(1, aktuell - 1))}
                 disabled={menge === 1}
                 aria-label="Menge verringern"
               >
@@ -381,11 +274,8 @@ export default function ProductDialog({
 
               <button
                 type="button"
-                onClick={() =>
-                  setMenge((aktuell) =>
-                    Math.min(20, aktuell + 1),
-                  )
-                }
+                onClick={() => setMenge((aktuell) => Math.min(99, aktuell + 1))}
+                disabled={menge === 99}
                 aria-label="Menge erhöhen"
               >
                 +
@@ -397,9 +287,10 @@ export default function ProductDialog({
             type="button"
             className={styles.addToCart}
             onClick={zumWarenkorbHinzufuegen}
+            disabled={!auswahlGueltig}
           >
             <span>Zum Warenkorb hinzufügen</span>
-            <strong>{formatierePreis(gesamtpreis)}</strong>
+            <strong>{formatPrice(gesamtpreis)}</strong>
           </button>
         </div>
       </section>

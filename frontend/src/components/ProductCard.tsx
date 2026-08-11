@@ -1,42 +1,31 @@
 "use client";
 
 import Image from "next/image";
-import type { Produkt } from "@/data/products";
-import { formatierePreis } from "@/data/products";
+import type { MenuProduct } from "@/lib/api";
+import { formatPrice } from "@/lib/api";
 import styles from "./ProductCard.module.css";
 
 type ProductCardProps = {
-  produkt: Produkt;
-  onSelect: (produkt: Produkt) => void;
+  produkt: MenuProduct;
+  onSelect: (produkt: MenuProduct) => void;
 };
 
-export default function ProductCard({
-  produkt,
-  onSelect,
-}: ProductCardProps) {
+const FALLBACK_IMAGE = "/images/palmen-grill-hero.png";
+
+export default function ProductCard({ produkt, onSelect }: ProductCardProps) {
   return (
-    <article
-      className={`${styles.card} ${
-        !produkt.ist_verfuegbar ? styles.unavailable : ""
-      }`}
-    >
+    <article className={styles.card}>
       <div className={styles.imageWrapper}>
         <Image
-          src={produkt.bild}
+          src={produkt.image ?? FALLBACK_IMAGE}
           alt={produkt.name}
           fill
           sizes="(max-width: 700px) 100vw, 420px"
           className={styles.image}
         />
 
-        {produkt.ist_highlight && (
+        {produkt.isHighlight && (
           <span className={styles.highlight}>Palmen-Tipp</span>
-        )}
-
-        {!produkt.ist_verfuegbar && (
-          <span className={styles.unavailableLabel}>
-            Heute nicht verfügbar
-          </span>
         )}
       </div>
 
@@ -44,33 +33,26 @@ export default function ProductCard({
         <div>
           <h3>{produkt.name}</h3>
           <p className={styles.description}>
-            {produkt.kurzbeschreibung}
+            {produkt.shortDescription ?? produkt.description ?? ""}
           </p>
         </div>
 
         <div className={styles.information}>
-          {produkt.zubereitungszeit_minuten > 0 && (
-            <span>
-              ca. {produkt.zubereitungszeit_minuten} Min.
-            </span>
+          {(produkt.preparationTimeMinutes ?? 0) > 0 && (
+            <span>ca. {produkt.preparationTimeMinutes} Min.</span>
           )}
 
-          {produkt.allergenhinweis && (
-            <span title={produkt.allergenhinweis}>
-              Allergene
-            </span>
+          {produkt.allergenInformation && (
+            <span title={produkt.allergenInformation}>Allergene</span>
           )}
         </div>
 
         <div className={styles.footer}>
-          <strong className={styles.price}>
-            {formatierePreis(produkt.preis)}
-          </strong>
+          <strong className={styles.price}>{formatPrice(produkt.price)}</strong>
 
           <button
             type="button"
             className={styles.addButton}
-            disabled={!produkt.ist_verfuegbar}
             onClick={() => onSelect(produkt)}
           >
             <span aria-hidden="true">＋</span>
