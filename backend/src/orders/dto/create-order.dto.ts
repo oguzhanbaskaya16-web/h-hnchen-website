@@ -1,5 +1,6 @@
 import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
+  IsEmail,
   IsISO8601,
   IsInt,
   IsNotEmpty,
@@ -38,6 +39,11 @@ export class OrderCustomerDto {
     message: 'phone muss eine gültige Telefonnummer sein.',
   })
   phone: string;
+
+  @Transform(trimTransform)
+  @IsEmail()
+  @MaxLength(150)
+  email: string;
 }
 
 export class CreateOrderDto {

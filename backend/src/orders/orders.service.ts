@@ -156,12 +156,12 @@ export class OrdersService {
       );
 
       const invalidQuantityItem = cart.items.find(
-        (item) => item.quantity < 1 || item.quantity > 20,
+        (item) => item.quantity < 1 || item.quantity > 99,
       );
 
       if (invalidQuantityItem) {
         throw new ConflictException(
-          `Die Menge des Produkts „${invalidQuantityItem.product.name}“ muss zwischen 1 und 20 liegen. Bitte aktualisiere deinen Warenkorb.`,
+          `Die Menge des Produkts „${invalidQuantityItem.product.name}“ muss zwischen 1 und 99 liegen. Bitte aktualisiere deinen Warenkorb.`,
         );
       }
 
@@ -350,6 +350,7 @@ export class OrdersService {
               firstName: createOrderDto.customer.firstName,
               lastName: createOrderDto.customer.lastName,
               phone: createOrderDto.customer.phone,
+              email: createOrderDto.customer.email.toLowerCase(),
             },
           },
           items: {
@@ -439,6 +440,7 @@ export class OrdersService {
             firstName: order.customer.firstName,
             lastName: order.customer.lastName,
             phone: order.customer.phone,
+            email: order.customer.email,
           }
         : null,
       note: order.note,

@@ -280,6 +280,7 @@ model OrderCustomer {
   firstName String @map("vorname") @db.VarChar(100)
   lastName  String @map("nachname") @db.VarChar(100)
   phone     String @map("telefon") @db.VarChar(30)
+  email     String @db.VarChar(150)
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

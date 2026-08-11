@@ -1975,6 +1975,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Max',
           lastName: 'Mustermann',
           phone: '+49 170 1234567',
+          email: 'max.mustermann@example.de',
+          email: 'max.mustermann@example.de',
         },
         note: 'Bitte gut durchgrillen.',
       })
@@ -1992,6 +1994,8 @@ describe('HealthController (e2e)', () => {
         firstName: 'Max',
         lastName: 'Mustermann',
         phone: '+49 170 1234567',
+        email: 'max.mustermann@example.de',
+        email: 'max.mustermann@example.de',
       },
       note: 'Bitte gut durchgrillen.',
       deliveryFee: '0.00',
@@ -2012,6 +2016,22 @@ describe('HealthController (e2e)', () => {
     });
 
     expect(storedCart.status).toBe('bestellt');
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: {
+        orderNumber,
+      },
+      include: {
+        customer: true,
+      },
+    });
+
+    expect(storedOrder.customer).toMatchObject({
+      firstName: 'Max',
+      lastName: 'Mustermann',
+      phone: '+49 170 1234567',
+      email: 'max.mustermann@example.de',
+    });
   });
 
   it('/api/v1/orders/:orderNumber (GET) ruft die Bestellbestätigung ab', async () => {
@@ -2027,6 +2047,8 @@ describe('HealthController (e2e)', () => {
         firstName: 'Max',
         lastName: 'Mustermann',
         phone: '+49 170 1234567',
+        email: 'max.mustermann@example.de',
+        email: 'max.mustermann@example.de',
       },
       note: 'Bitte gut durchgrillen.',
       deliveryFee: '0.00',
@@ -2048,6 +2070,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Max',
           lastName: 'Mustermann',
           phone: '+49 170 1234567',
+          email: 'max.mustermann@example.de',
+          email: 'max.mustermann@example.de',
         },
       })
       .expect(409);
@@ -2073,6 +2097,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+          email: 'erika.musterfrau@example.de',
         },
       })
       .expect(400);
@@ -2096,6 +2122,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+          email: 'erika.musterfrau@example.de',
         },
       })
       .expect(404);
@@ -2117,6 +2145,7 @@ describe('HealthController (e2e)', () => {
           firstName: '',
           lastName: '',
           phone: 'abc',
+          email: 'invalid-email',
         },
       })
       .expect(400);
@@ -2129,6 +2158,57 @@ describe('HealthController (e2e)', () => {
     expect(Array.isArray(response.body.message)).toBe(true);
   });
 
+  it('/api/v1/orders (POST) lehnt eine fehlende Kunden-E-Mail ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        paymentMethodId,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(Array.isArray(response.body.message)).toBe(true);
+    expect(response.body.message).toEqual(
+      expect.arrayContaining([expect.stringContaining('email')]),
+    );
+  });
+
+  it('/api/v1/orders (POST) lehnt eine ungültige Kunden-E-Mail ab', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: crypto.randomUUID(),
+        paymentMethodId,
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+          email: 'keine-gueltige-email',
+        },
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+    });
+
+    expect(Array.isArray(response.body.message)).toBe(true);
+    expect(response.body.message).toEqual(
+      expect.arrayContaining([expect.stringContaining('email')]),
+    );
+  });
+
   it('/api/v1/orders (POST) lehnt Lieferdaten im Abhol-MVP ab', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/orders')
@@ -2139,6 +2219,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+          email: 'erika.musterfrau@example.de',
         },
         deliveryAddress: {
           street: 'Musterstraße',
@@ -2169,6 +2251,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+          email: 'erika.musterfrau@example.de',
         },
         requestedTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       })
@@ -2192,6 +2276,8 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+          email: 'erika.musterfrau@example.de',
         },
         requestedTime: new Date(
           Date.now() + 15 * 24 * 60 * 60 * 1000,
@@ -2217,6 +2303,182 @@ describe('HealthController (e2e)', () => {
       error: 'Not Found',
       message: 'Bestellung wurde nicht gefunden.',
     });
+  });
+
+  it('/api/v1/orders/:orderNumber/pdf (GET) liefert ein gültiges PDF', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${orderNumber}/pdf`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+
+        res.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        res.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      `bestellung-${orderNumber}.pdf`,
+    );
+
+    const pdfBuffer = response.body as Buffer;
+
+    expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
+    expect(pdfBuffer.length).toBeGreaterThan(100);
+    expect(pdfBuffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+  });
+
+  it('/api/v1/orders/:orderNumber/pdf (GET) behandelt unbekannte Bestellungen', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/orders/IDIL-20990101-UNBEKANNT/pdf')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'Bestellung wurde nicht gefunden.',
+    });
+  });
+
+  it('/api/v1/orders/:orderNumber/pdf verwendet gespeicherte Bestell-Snapshots', async () => {
+    const order = await prisma.order.findUniqueOrThrow({
+      where: {
+        orderNumber,
+      },
+      include: {
+        items: {
+          include: {
+            options: true,
+          },
+        },
+      },
+    });
+
+    const firstItem = order.items[0];
+
+    if (!firstItem) {
+      throw new Error(
+        'Für den PDF-Snapshot-Test wurde keine Bestellposition gefunden.',
+      );
+    }
+
+    const originalOrderItemPrice = firstItem.unitPrice;
+    const originalOrderOption = firstItem.options[0];
+
+    const relatedProduct = firstItem.productId
+      ? await prisma.product.findUnique({
+          where: {
+            id: firstItem.productId,
+          },
+        })
+      : null;
+
+    const relatedProductOption = originalOrderOption
+      ? await prisma.productOption.findUnique({
+          where: {
+            id: originalOrderOption.productOptionId,
+          },
+        })
+      : null;
+
+    const originalProductPrice = relatedProduct?.price ?? null;
+    const originalOptionSurcharge = relatedProductOption?.surcharge ?? null;
+
+    try {
+      if (relatedProduct) {
+        await prisma.product.update({
+          where: {
+            id: relatedProduct.id,
+          },
+          data: {
+            price: relatedProduct.price.plus(9),
+          },
+        });
+      }
+
+      if (relatedProductOption) {
+        await prisma.productOption.update({
+          where: {
+            id: relatedProductOption.id,
+          },
+          data: {
+            surcharge: relatedProductOption.surcharge.plus(4),
+          },
+        });
+      }
+
+      const unchangedOrder = await prisma.order.findUniqueOrThrow({
+        where: {
+          orderNumber,
+        },
+        include: {
+          items: {
+            include: {
+              options: true,
+            },
+          },
+        },
+      });
+
+      expect(unchangedOrder.items[0].unitPrice.toFixed(2)).toBe(
+        originalOrderItemPrice.toFixed(2),
+      );
+
+      if (originalOrderOption) {
+        expect(unchangedOrder.items[0].options[0].surcharge.toFixed(2)).toBe(
+          originalOrderOption.surcharge.toFixed(2),
+        );
+      }
+
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/orders/${orderNumber}/pdf`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+
+          res.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
+
+          res.on('end', () => {
+            callback(null, Buffer.concat(chunks));
+          });
+        })
+        .expect(200);
+
+      const pdfBuffer = response.body as Buffer;
+
+      expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
+      expect(pdfBuffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    } finally {
+      if (relatedProduct && originalProductPrice) {
+        await prisma.product.update({
+          where: {
+            id: relatedProduct.id,
+          },
+          data: {
+            price: originalProductPrice,
+          },
+        });
+      }
+
+      if (relatedProductOption && originalOptionSurcharge) {
+        await prisma.productOption.update({
+          where: {
+            id: relatedProductOption.id,
+          },
+          data: {
+            surcharge: originalOptionSurcharge,
+          },
+        });
+      }
+    }
   });
 
   it('/api/v1/orders (POST) lehnt ein zwischenzeitlich deaktiviertes Produkt ab', async () => {
@@ -2255,6 +2517,8 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2329,6 +2593,8 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2397,6 +2663,8 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2469,6 +2737,8 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2546,6 +2816,8 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2575,7 +2847,43 @@ describe('HealthController (e2e)', () => {
     }
   });
 
-  it('/api/v1/orders (POST) lehnt eine ungültig gespeicherte Menge ab', async () => {
+  it('/api/v1/orders (POST) akzeptiert eine gespeicherte Menge von 21', async () => {
+    const { product, optionIds } = await getConfiguredProduct();
+
+    const cartResponse = await request(app.getHttpServer())
+      .post('/api/v1/carts')
+      .expect(201);
+
+    const addResponse = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
+      .send({
+        productId: product.id,
+        quantity: 21,
+        optionIds,
+      })
+      .expect(201);
+
+    expect(addResponse.body.items[0].quantity).toBe(21);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .send({
+        cartId: cartResponse.body.cartId,
+        paymentMethodId,
+        requestedTime: getValidRequestedTime(),
+        customer: {
+          firstName: 'Erika',
+          lastName: 'Musterfrau',
+          phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
+        },
+      })
+      .expect(201);
+
+    expect(response.body.items[0].quantity).toBe(21);
+  });
+
+  it('/api/v1/orders (POST) lehnt eine ungültig gespeicherte Menge über 99 ab', async () => {
     const { product, optionIds } = await getConfiguredProduct();
 
     const cartResponse = await request(app.getHttpServer())
@@ -2598,7 +2906,7 @@ describe('HealthController (e2e)', () => {
         id: cartItemId,
       },
       data: {
-        quantity: 21,
+        quantity: 100,
       },
     });
 
@@ -2613,6 +2921,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(409);
@@ -2620,7 +2929,7 @@ describe('HealthController (e2e)', () => {
       expect(response.body).toMatchObject({
         statusCode: 409,
         error: 'Conflict',
-        message: `Die Menge des Produkts „${product.name}“ muss zwischen 1 und 20 liegen. Bitte aktualisiere deinen Warenkorb.`,
+        message: `Die Menge des Produkts „${product.name}“ muss zwischen 1 und 99 liegen. Bitte aktualisiere deinen Warenkorb.`,
       });
     } finally {
       await prisma.cartItem.update({
@@ -2690,6 +2999,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
           requestedTime: requestedTime.toISOString(),
         })
@@ -2763,6 +3073,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
           requestedTime: requestedTime.toISOString(),
         })
@@ -2836,6 +3147,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
           requestedTime: requestedTime.toISOString(),
         })
@@ -2946,6 +3258,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
           requestedTime: requestedTime.toISOString(),
         })
@@ -2996,6 +3309,7 @@ describe('HealthController (e2e)', () => {
         firstName: 'Erika',
         lastName: 'Musterfrau',
         phone: '+49 170 7654321',
+        email: 'erika.musterfrau@example.de',
       },
     };
 
@@ -3034,6 +3348,7 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
         },
       })
       .expect(400);
@@ -3070,6 +3385,7 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
         },
       })
       .expect(400);
@@ -3116,6 +3432,7 @@ describe('HealthController (e2e)', () => {
             firstName: 'Erika',
             lastName: 'Musterfrau',
             phone: '+49 170 7654321',
+            email: 'erika.musterfrau@example.de',
           },
         })
         .expect(400);
@@ -3166,6 +3483,7 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
+          email: 'erika.musterfrau@example.de',
         },
       })
       .expect(201);
