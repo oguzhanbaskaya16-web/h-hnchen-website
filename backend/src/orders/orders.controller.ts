@@ -34,6 +34,11 @@ export class OrdersController {
     response.end(pdf);
   }
 
+  @Get('payment-methods')
+  findPaymentMethods() {
+    return this.ordersService.findPaymentMethods();
+  }
+
   @Get(':orderNumber')
   findByOrderNumber(@Param('orderNumber') orderNumber: string) {
     return this.ordersService.findByOrderNumber(orderNumber);

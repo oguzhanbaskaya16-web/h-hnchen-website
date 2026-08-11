@@ -489,106 +489,225 @@ async function main(): Promise<void> {
     }
   }
 
-  const halfChicken = await findProductByName('Halbes Hähnchen');
-  const largeFries = await findProductByName('Große Pommes');
-  const coleslaw = await findProductByName('Krautsalat');
-  const garlicSauce = await findProductByName('Knoblauchsauce');
-  const bbqSauce = await findProductByName('BBQ-Sauce');
+  type OptionSeed = {
+    productName: string;
+    surcharge: number;
+  };
 
-  const sideGroup = await prisma.productOptionGroup.upsert({
-    where: {
-      mainProductId_optionType: {
-        mainProductId: halfChicken.id,
-        optionType: 'SIDE',
-      },
-    },
-    update: {
-      name: 'Beilage',
-      minSelections: 0,
-      maxSelections: 2,
-      sortOrder: 1,
-    },
-    create: {
-      mainProductId: halfChicken.id,
+  type OptionGroupSeed = {
+    mainProductName: string;
+    name: string;
+    optionType: string;
+    minSelections: number;
+    maxSelections: number;
+    sortOrder: number;
+    options: OptionSeed[];
+  };
+
+  const sauceOptionsIncluded: OptionSeed[] = [
+    { productName: 'Knoblauchsauce', surcharge: 0 },
+    { productName: 'Cocktailsauce', surcharge: 0 },
+    { productName: 'BBQ-Sauce', surcharge: 0 },
+    { productName: 'Currysauce', surcharge: 0 },
+    { productName: 'Scharfe Sauce', surcharge: 0 },
+  ];
+
+  const sauceOptionsPaid: OptionSeed[] = [
+    { productName: 'Knoblauchsauce', surcharge: 1 },
+    { productName: 'Cocktailsauce', surcharge: 1 },
+    { productName: 'BBQ-Sauce', surcharge: 1 },
+    { productName: 'Currysauce', surcharge: 1 },
+    { productName: 'Scharfe Sauce', surcharge: 1 },
+  ];
+
+  const drinkOptionsIncluded: OptionSeed[] = [
+    { productName: 'Coca-Cola', surcharge: 0 },
+    { productName: 'Coca-Cola Zero', surcharge: 0 },
+    { productName: 'Fanta', surcharge: 0 },
+    { productName: 'Sprite', surcharge: 0 },
+    { productName: 'Ayran', surcharge: 0 },
+    { productName: 'Mineralwasser', surcharge: 0 },
+  ];
+
+  const optionGroupSeeds: OptionGroupSeed[] = [
+    {
+      mainProductName: 'Halbes Hähnchen',
       name: 'Beilage',
       optionType: 'SIDE',
       minSelections: 0,
       maxSelections: 2,
       sortOrder: 1,
+      options: [
+        {
+          productName: 'Große Pommes',
+          surcharge: 3.5,
+        },
+        {
+          productName: 'Krautsalat',
+          surcharge: 3,
+        },
+      ],
     },
-  });
-
-  const sauceGroup = await prisma.productOptionGroup.upsert({
-    where: {
-      mainProductId_optionType: {
-        mainProductId: halfChicken.id,
-        optionType: 'SAUCE',
-      },
-    },
-    update: {
-      name: 'Sauce',
-      minSelections: 0,
-      maxSelections: 1,
-      sortOrder: 2,
-    },
-    create: {
-      mainProductId: halfChicken.id,
+    {
+      mainProductName: 'Halbes Hähnchen',
       name: 'Sauce',
       optionType: 'SAUCE',
       minSelections: 0,
       maxSelections: 1,
       sortOrder: 2,
+      options: sauceOptionsPaid,
     },
-  });
-
-  const productOptions = [
     {
-      optionGroupId: sideGroup.id,
-      optionProductId: largeFries.id,
-      surcharge: 3.5,
+      mainProductName: 'Hähnchen mit Pommes',
+      name: 'Sauce',
+      optionType: 'SAUCE',
+      minSelections: 0,
+      maxSelections: 1,
       sortOrder: 1,
+      options: sauceOptionsPaid,
     },
     {
-      optionGroupId: sideGroup.id,
-      optionProductId: coleslaw.id,
-      surcharge: 3,
-      sortOrder: 2,
-    },
-    {
-      optionGroupId: sauceGroup.id,
-      optionProductId: garlicSauce.id,
-      surcharge: 1,
+      mainProductName: 'Hähnchenflügel',
+      name: 'Zusätzliche Sauce',
+      optionType: 'SAUCE',
+      minSelections: 0,
+      maxSelections: 1,
       sortOrder: 1,
+      options: sauceOptionsPaid,
     },
     {
-      optionGroupId: sauceGroup.id,
-      optionProductId: bbqSauce.id,
-      surcharge: 1,
+      mainProductName: 'Hähnchenstreifen',
+      name: 'Sauce',
+      optionType: 'SAUCE',
+      minSelections: 1,
+      maxSelections: 1,
+      sortOrder: 1,
+      options: sauceOptionsIncluded,
+    },
+    {
+      mainProductName: 'Hähnchen-Menü',
+      name: 'Sauce',
+      optionType: 'SAUCE',
+      minSelections: 1,
+      maxSelections: 1,
+      sortOrder: 1,
+      options: sauceOptionsIncluded,
+    },
+    {
+      mainProductName: 'Hähnchen-Menü',
+      name: 'Getränk',
+      optionType: 'DRINK',
+      minSelections: 1,
+      maxSelections: 1,
       sortOrder: 2,
+      options: drinkOptionsIncluded,
+    },
+    {
+      mainProductName: 'Ganzes-Hähnchen-Menü',
+      name: 'Saucen',
+      optionType: 'SAUCE',
+      minSelections: 2,
+      maxSelections: 2,
+      sortOrder: 1,
+      options: sauceOptionsIncluded,
+    },
+    {
+      mainProductName: 'Ganzes-Hähnchen-Menü',
+      name: 'Getränke',
+      optionType: 'DRINK',
+      minSelections: 2,
+      maxSelections: 2,
+      sortOrder: 2,
+      options: drinkOptionsIncluded,
+    },
+    {
+      mainProductName: 'Familienangebot',
+      name: 'Saucen',
+      optionType: 'SAUCE',
+      minSelections: 3,
+      maxSelections: 3,
+      sortOrder: 1,
+      options: sauceOptionsIncluded,
+    },
+    {
+      mainProductName: 'Familienangebot',
+      name: 'Getränke',
+      optionType: 'DRINK',
+      minSelections: 2,
+      maxSelections: 2,
+      sortOrder: 2,
+      options: drinkOptionsIncluded,
+    },
+    {
+      mainProductName: 'Flügel-Menü',
+      name: 'Sauce',
+      optionType: 'SAUCE',
+      minSelections: 1,
+      maxSelections: 1,
+      sortOrder: 1,
+      options: sauceOptionsIncluded,
+    },
+    {
+      mainProductName: 'Flügel-Menü',
+      name: 'Getränk',
+      optionType: 'DRINK',
+      minSelections: 1,
+      maxSelections: 1,
+      sortOrder: 2,
+      options: drinkOptionsIncluded,
     },
   ];
 
-  for (const productOption of productOptions) {
-    await prisma.productOption.upsert({
+  for (const groupSeed of optionGroupSeeds) {
+    const mainProduct = await findProductByName(groupSeed.mainProductName);
+
+    const optionGroup = await prisma.productOptionGroup.upsert({
       where: {
-        mainProductId_optionProductId: {
-          mainProductId: halfChicken.id,
-          optionProductId: productOption.optionProductId,
+        mainProductId_optionType: {
+          mainProductId: mainProduct.id,
+          optionType: groupSeed.optionType,
         },
       },
       update: {
-        optionGroupId: productOption.optionGroupId,
-        surcharge: productOption.surcharge,
-        sortOrder: productOption.sortOrder,
+        name: groupSeed.name,
+        minSelections: groupSeed.minSelections,
+        maxSelections: groupSeed.maxSelections,
+        sortOrder: groupSeed.sortOrder,
       },
       create: {
-        mainProductId: halfChicken.id,
-        optionGroupId: productOption.optionGroupId,
-        optionProductId: productOption.optionProductId,
-        surcharge: productOption.surcharge,
-        sortOrder: productOption.sortOrder,
+        mainProductId: mainProduct.id,
+        name: groupSeed.name,
+        optionType: groupSeed.optionType,
+        minSelections: groupSeed.minSelections,
+        maxSelections: groupSeed.maxSelections,
+        sortOrder: groupSeed.sortOrder,
       },
     });
+
+    for (const [optionIndex, optionSeed] of groupSeed.options.entries()) {
+      const optionProduct = await findProductByName(optionSeed.productName);
+
+      await prisma.productOption.upsert({
+        where: {
+          mainProductId_optionProductId: {
+            mainProductId: mainProduct.id,
+            optionProductId: optionProduct.id,
+          },
+        },
+        update: {
+          optionGroupId: optionGroup.id,
+          surcharge: optionSeed.surcharge,
+          sortOrder: optionIndex + 1,
+        },
+        create: {
+          mainProductId: mainProduct.id,
+          optionGroupId: optionGroup.id,
+          optionProductId: optionProduct.id,
+          surcharge: optionSeed.surcharge,
+          sortOrder: optionIndex + 1,
+        },
+      });
+    }
   }
 
   console.log(

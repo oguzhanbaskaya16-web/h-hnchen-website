@@ -504,4 +504,23 @@ export class OrdersService {
 
     return `IDIL-${datePart}-${randomPart}`;
   }
+  async findPaymentMethods() {
+    const paymentMethods = await this.prisma.paymentMethod.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+        isOnlinePayment: true,
+      },
+    });
+
+    return {
+      paymentMethods,
+    };
+  }
 }
