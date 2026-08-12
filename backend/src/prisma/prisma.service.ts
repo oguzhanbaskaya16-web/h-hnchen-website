@@ -18,7 +18,15 @@ export class PrismaService
       throw new Error('DATABASE_URL ist nicht gesetzt.');
     }
 
-    const adapter = new PrismaPg({ connectionString });
+    const adapter = new PrismaPg({
+  connectionString,
+  ssl:
+    process.env.DATABASE_SSL === 'true'
+      ? {
+          rejectUnauthorized: false,
+        }
+      : undefined,
+});
 
     super({ adapter });
   }
