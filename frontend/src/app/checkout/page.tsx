@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 
 import { useRouter } from "next/navigation";
+import styles from "./checkout.module.css";
 
 const CART_ID_SPEICHER = "palmen-grill-cart-id";
 
@@ -265,205 +266,403 @@ export default function CheckoutPage() {
       setBestellungLaeuft(false);
     }
   }
-  if (laedt) {
-    return (
-      <main>
+ if (laedt) {
+  return (
+    <main className={styles.page}>
+      <section className={styles.state}>
         <h1>Checkout</h1>
         <p>Warenkorb wird geladen …</p>
-      </main>
-    );
-  }
+      </section>
+    </main>
+  );
+}
 
-  if (fehler) {
-    return (
-      <main>
+if (fehler) {
+  return (
+    <main className={styles.page}>
+      <section className={styles.state}>
         <h1>Checkout</h1>
         <p>{fehler}</p>
         <Link href="/speisekarte">Zurück zur Speisekarte</Link>
-      </main>
-    );
-  }
+      </section>
+    </main>
+  );
+}
 
-  if (!warenkorb || warenkorb.items.length === 0) {
-    return (
-      <main>
+if (!warenkorb || warenkorb.items.length === 0) {
+  return (
+    <main className={styles.page}>
+      <section className={styles.state}>
         <h1>Checkout</h1>
         <p>Dein Warenkorb ist leer.</p>
         <Link href="/speisekarte">Zur Speisekarte</Link>
-      </main>
-    );
-  }
+      </section>
+    </main>
+  );
+}
 
-  return (
-    <main>
-      <h1>Checkout</h1>
+return (
+  <main className={styles.page}>
+    <div className={styles.container}>
+      <Link href="/speisekarte" className={styles.backLink}>
+        ← Zurück zur Speisekarte
+      </Link>
 
-      <section>
-        <h2>Deine Bestellung</h2>
-
-        {warenkorb.items.map((position) => (
-          <article key={position.itemId}>
-            <h3>{position.product.name}</h3>
-
-            <p>
-              {position.quantity} × {formatPrice(position.baseUnitPrice)}
-            </p>
-
-            {position.options.length > 0 && (
-              <ul>
-                {position.options.map((option) => (
-                  <li key={option.id}>
-                    {option.name}
-                    {Number.parseFloat(option.surcharge) > 0
-                      ? ` (+ ${formatPrice(option.surcharge)})`
-                      : ""}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <strong>{formatPrice(position.lineTotal)}</strong>
-          </article>
-        ))}
-
-        <p>
-          <strong>Gesamt: {formatPrice(warenkorb.total)}</strong>
+      <section className={styles.hero}>
+        <p className={styles.eyebrow}>Fast geschafft</p>
+        <h1>Bestellung abschließen</h1>
+        <p className={styles.subtitle}>
+          Prüfe deine Bestellung, gib deine Kontaktdaten ein und wähle deine
+          gewünschte Abholzeit.
         </p>
       </section>
 
-      <section>
-        <h2>Deine Daten</h2>
-
-        <div>
-          <label htmlFor="firstName">Vorname *</label>
-          <input
-            id="firstName"
-            name="firstName"
-            type="text"
-            autoComplete="given-name"
-            value={customer.firstName}
-            onChange={(event) => feldAendern("firstName", event.target.value)}
-            maxLength={100}
-            required
-          />
-
-          {formularFehler.firstName && <p>{formularFehler.firstName}</p>}
+      <div className={styles.steps} aria-label="Bestellfortschritt">
+        <div className={`${styles.step} ${styles.stepDone}`}>
+          <div className={styles.stepCircle}>✓</div>
+          <span>Warenkorb</span>
         </div>
 
-        <div>
-          <label htmlFor="lastName">Nachname *</label>
-          <input
-            id="lastName"
-            name="lastName"
-            type="text"
-            autoComplete="family-name"
-            value={customer.lastName}
-            onChange={(event) => feldAendern("lastName", event.target.value)}
-            maxLength={100}
-            required
-          />
-
-          {formularFehler.lastName && <p>{formularFehler.lastName}</p>}
+        <div className={`${styles.step} ${styles.stepActive}`}>
+          <div className={styles.stepCircle}>2</div>
+          <span>Daten &amp; Zahlung</span>
         </div>
 
-        <div>
-          <label htmlFor="email">E-Mail *</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            value={customer.email}
-            onChange={(event) => feldAendern("email", event.target.value)}
-            maxLength={150}
-            required
-          />
+        <div className={styles.step}>
+          <div className={styles.stepCircle}>3</div>
+          <span>Bestätigung</span>
+        </div>
+      </div>
 
-          {formularFehler.email && <p>{formularFehler.email}</p>}
+      <div className={styles.layout}>
+        <div className={styles.leftColumn}>
+          <section className={styles.card}>
+            <div className={styles.cardContent}>
+              <div className={styles.cardHeader}>
+                <div className={styles.numberBadge}>1</div>
+
+                <div>
+                  <p className={styles.cardEyebrow}>Persönliche Angaben</p>
+                  <h2 className={styles.cardTitle}>Deine Kontaktdaten</h2>
+                </div>
+              </div>
+
+              <p className={styles.description}>
+                Damit wir deine Bestellung eindeutig zuordnen können.
+              </p>
+
+              <div className={styles.formGrid}>
+                <div className={styles.field}>
+                  <label htmlFor="firstName">Vorname *</label>
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    autoComplete="given-name"
+                    value={customer.firstName}
+                    onChange={(event) =>
+                      feldAendern("firstName", event.target.value)
+                    }
+                    placeholder="Vorname"
+                    maxLength={100}
+                    required
+                  />
+
+                  {formularFehler.firstName && (
+                    <p className={styles.error}>
+                      {formularFehler.firstName}
+                    </p>
+                  )}
+                </div>
+
+                <div className={styles.field}>
+                  <label htmlFor="lastName">Nachname *</label>
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    autoComplete="family-name"
+                    value={customer.lastName}
+                    onChange={(event) =>
+                      feldAendern("lastName", event.target.value)
+                    }
+                    placeholder="Nachname"
+                    maxLength={100}
+                    required
+                  />
+
+                  {formularFehler.lastName && (
+                    <p className={styles.error}>
+                      {formularFehler.lastName}
+                    </p>
+                  )}
+                </div>
+
+                <div className={styles.field}>
+                  <label htmlFor="email">E-Mail *</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={customer.email}
+                    onChange={(event) =>
+                      feldAendern("email", event.target.value)
+                    }
+                    placeholder="name@beispiel.de"
+                    maxLength={150}
+                    required
+                  />
+
+                  {formularFehler.email && (
+                    <p className={styles.error}>{formularFehler.email}</p>
+                  )}
+                </div>
+
+                <div className={styles.field}>
+                  <label htmlFor="phone">Telefon *</label>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    autoComplete="tel"
+                    value={customer.phone}
+                    onChange={(event) =>
+                      feldAendern("phone", event.target.value)
+                    }
+                    placeholder="+49 ..."
+                    minLength={6}
+                    maxLength={30}
+                    required
+                  />
+
+                  {formularFehler.phone && (
+                    <p className={styles.error}>{formularFehler.phone}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.cardContent}>
+              <div className={styles.cardHeader}>
+                <div className={styles.numberBadge}>2</div>
+
+                <div>
+                  <p className={styles.cardEyebrow}>Abholung</p>
+                  <h2 className={styles.cardTitle}>Abholzeit wählen</h2>
+                </div>
+              </div>
+
+              <p className={styles.description}>
+                Teile uns mit, wann du deine Bestellung abholen möchtest.
+              </p>
+
+              <div className={styles.pickupInfo}>
+                <div className={styles.pickupIcon}>⏱</div>
+
+                <div>
+                  <strong>Frisch zur Abholung</strong>
+                  <p>
+                    Wir bereiten deine Bestellung passend zu deiner Wunschzeit
+                    zu.
+                  </p>
+                </div>
+              </div>
+
+              <div className={`${styles.field} ${styles.timeField}`}>
+                <label htmlFor="requestedTime">
+                  Gewünschter Abholzeitpunkt *
+                </label>
+
+                <input
+                  id="requestedTime"
+                  name="requestedTime"
+                  type="datetime-local"
+                  value={requestedTime}
+                  onChange={(event) => {
+                    setRequestedTime(event.target.value);
+                    setRequestedTimeFehler(null);
+                  }}
+                  required
+                />
+
+                <p className={styles.helper}>
+                  Bitte plane mindestens 30 Minuten Vorbereitungszeit ein.
+                </p>
+
+                {requestedTimeFehler && (
+                  <p className={styles.error}>{requestedTimeFehler}</p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.cardContent}>
+              <div className={styles.cardHeader}>
+                <div className={styles.numberBadge}>3</div>
+
+                <div>
+                  <p className={styles.cardEyebrow}>Bezahlung</p>
+                  <h2 className={styles.cardTitle}>Zahlungsart</h2>
+                </div>
+              </div>
+
+              <p className={styles.description}>
+                Wähle aus, wie du deine Bestellung bezahlen möchtest.
+              </p>
+
+              {paymentFehler && (
+                <p className={styles.error}>{paymentFehler}</p>
+              )}
+
+              <div className={styles.paymentGrid}>
+                {paymentMethods.map((paymentMethod) => {
+                  const selected = paymentMethodId === paymentMethod.id;
+
+                  return (
+                    <label
+                      key={paymentMethod.id}
+                      className={`${styles.paymentOption} ${
+                        selected ? styles.paymentOptionSelected : ""
+                      }`}
+                    >
+                      <div className={styles.paymentIcon}>€</div>
+
+                      <div>
+                        <span className={styles.paymentName}>
+                          {paymentMethod.name}
+                        </span>
+                        <span className={styles.paymentDescription}>
+                          Bei Abholung bezahlen
+                        </span>
+                      </div>
+
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={paymentMethod.id}
+                        checked={selected}
+                        onChange={() => {
+                          setPaymentMethodId(paymentMethod.id);
+                          setPaymentFehler(null);
+                        }}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div>
-          <label htmlFor="phone">Telefon *</label>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            value={customer.phone}
-            onChange={(event) => feldAendern("phone", event.target.value)}
-            minLength={6}
-            maxLength={30}
-            required
-          />
+        <aside className={`${styles.card} ${styles.summary}`}>
+          <div className={styles.summaryHeader}>
+            <div className={styles.summaryHeaderTop}>
+              <div>
+                <p className={styles.summaryEyebrow}>Dein Warenkorb</p>
+                <h2 className={styles.summaryTitle}>Bestellübersicht</h2>
+              </div>
 
-          {formularFehler.phone && <p>{formularFehler.phone}</p>}
-        </div>
-      </section>
+              <span className={styles.itemCount}>
+                {warenkorb.items.reduce(
+                  (summe, position) => summe + position.quantity,
+                  0,
+                )}{" "}
+                Artikel
+              </span>
+            </div>
+          </div>
 
-      <section>
-        <h2>Abholzeit</h2>
+          <div className={styles.items}>
+            {warenkorb.items.map((position) => (
+              <article key={position.itemId} className={styles.item}>
+                <div className={styles.quantity}>
+                  {position.quantity}×
+                </div>
 
-        <div>
-          <label htmlFor="requestedTime">Gewünschter Abholzeitpunkt *</label>
+                <div>
+                  <h3 className={styles.itemName}>
+                    {position.product.name}
+                  </h3>
 
-          <input
-            id="requestedTime"
-            name="requestedTime"
-            type="datetime-local"
-            value={requestedTime}
-            onChange={(event) => {
-              setRequestedTime(event.target.value);
-              setRequestedTimeFehler(null);
-            }}
-            required
-          />
+                  <p className={styles.itemBasePrice}>
+                    {formatPrice(position.baseUnitPrice)} pro Stück
+                  </p>
+                </div>
 
-          <p>Bitte plane mindestens 30 Minuten Vorbereitungszeit ein.</p>
+                <strong className={styles.itemPrice}>
+                  {formatPrice(position.lineTotal)}
+                </strong>
 
-          {requestedTimeFehler && <p>{requestedTimeFehler}</p>}
-        </div>
-      </section>
+                {position.options.length > 0 && (
+                  <ul className={styles.options}>
+                    {position.options.map((option) => (
+                      <li key={option.id} className={styles.option}>
+                        {option.name}
+                        {Number.parseFloat(option.surcharge) > 0
+                          ? ` (+ ${formatPrice(option.surcharge)})`
+                          : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            ))}
+          </div>
 
-      <section>
-        <h2>Zahlungsart</h2>
+          <div className={styles.totals}>
+            <div className={styles.totalRow}>
+              <span>Zwischensumme</span>
+              <span>{formatPrice(warenkorb.total)}</span>
+            </div>
 
-        {paymentFehler && <p>{paymentFehler}</p>}
+            <div className={styles.totalRow}>
+              <span>Abholung</span>
+              <span className={styles.free}>Kostenlos</span>
+            </div>
 
-        {paymentMethods.map((paymentMethod) => (
-          <label key={paymentMethod.id}>
-            <input
-              type="radio"
-              name="paymentMethod"
-              value={paymentMethod.id}
-              checked={paymentMethodId === paymentMethod.id}
-              onChange={() => {
-                setPaymentMethodId(paymentMethod.id);
-                setPaymentFehler(null);
-              }}
-            />
+            <div className={styles.grandTotal}>
+              <span>Gesamt</span>
+              <strong>{formatPrice(warenkorb.total)}</strong>
+            </div>
 
-            {paymentMethod.name}
-          </label>
-        ))}
+            {bestellFehler && (
+              <p className={styles.error}>{bestellFehler}</p>
+            )}
 
-        {!paymentMethodId && paymentFehler === null && (
-          <p>Bitte wähle eine Zahlungsart aus.</p>
-        )}
-      </section>
+            <button
+              className={styles.submitButton}
+              type="button"
+              onClick={() => void weiter()}
+              disabled={bestellungLaeuft}
+            >
+              <span>
+                {bestellungLaeuft
+                  ? "Bestellung wird übermittelt …"
+                  : "Bestellung aufgeben"}
+              </span>
+              <span aria-hidden="true">→</span>
+            </button>
 
-      {bestellFehler && <p>{bestellFehler}</p>}
+            <div className={styles.secureInfo}>
+              <span className={styles.secureCheck}>✓</span>
 
-      <button
-        type="button"
-        onClick={() => void weiter()}
-        disabled={bestellungLaeuft}
-      >
-        {bestellungLaeuft
-          ? "Bestellung wird übermittelt …"
-          : "Bestellung aufgeben"}
-      </button>
+              <span>
+                Deine Bestellung wird erst nach Klick auf den Button
+                verbindlich übermittelt.
+              </span>
+            </div>
 
-      <Link href="/speisekarte">Zurück zur Speisekarte</Link>
-    </main>
-  );
+            <Link href="/speisekarte" className={styles.editCart}>
+              Warenkorb bearbeiten
+            </Link>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+);
 }
