@@ -3,11 +3,20 @@ import PDFDocument from 'pdfkit';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+export type PrintPdfContext = {
+  printJobId: string;
+  attempt: number;
+  maxAttempts: number;
+};
+
 @Injectable()
 export class OrderPdfService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async generateOrderPdf(orderNumber: string): Promise<Buffer> {
+  async generateOrderPdf(
+    orderNumber: string,
+    printContext?: PrintPdfContext,
+  ): Promise<Buffer> {
     const normalizedOrderNumber = orderNumber.trim().toUpperCase();
 
     const [order, restaurant] = await Promise.all([
@@ -59,8 +68,10 @@ export class OrderPdfService {
         info: {
           Title: `Bestellbeleg ${order.orderNumber}`,
           Author: restaurant?.name ?? 'IDIL Hähnchengrill',
-          Subject: 'Bestellbeleg',
-          Keywords: 'Bestellung, Abholung, IDIL Hähnchengrill',
+          Subject: printContext ? 'Interner Druckbeleg' : 'Bestellbeleg',
+          Keywords: printContext
+            ? 'Bestellung, Abholung, Druckauftrag, IDIL Hähnchengrill'
+            : 'Bestellung, Abholung, IDIL Hähnchengrill',
         },
       });
 
@@ -178,10 +189,49 @@ export class OrderPdfService {
       }
 
       doc.moveDown(0.8);
-      doc.font('Helvetica-Bold').fontSize(15).text('BESTELLBELEG', {
-        align: 'center',
-      });
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(15)
+        .fillColor('black')
+        .text(printContext ? 'INTERNER DRUCKBELEG' : 'BESTELLBELEG', {
+          align: 'center',
+        });
 
+      if (printContext) {
+        doc.moveDown(0.5);
+
+        if (printContext.attempt > 1) {
+          doc
+            .font('Helvetica-Bold')
+            .fontSize(16)
+            .fillColor('#b91c1c')
+            .text('WIEDERHOLUNGSDRUCK', {
+              align: 'center',
+            });
+
+          doc.moveDown(0.25);
+        }
+
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(10)
+          .fillColor('black')
+          .text(
+            `Druckversuch ${printContext.attempt} von ${printContext.maxAttempts}`,
+            {
+              align: 'center',
+            },
+          );
+
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .text(`PrintJob-ID: ${printContext.printJobId}`, {
+            align: 'center',
+          });
+      }
+
+      doc.fillColor('black');
       doc.moveDown(0.8);
       separator();
 
@@ -202,7 +252,10 @@ export class OrderPdfService {
 
         labelValue('Name:', customerName);
         labelValue('Telefon:', order.customer.phone);
-        labelValue('E-Mail:', order.customer.email);
+
+        if (!printContext) {
+          labelValue('E-Mail:', order.customer.email);
+        }
       } else {
         doc
           .font('Helvetica')
@@ -353,12 +406,20 @@ export class OrderPdfService {
         doc.switchToPage(pageIndex);
 
         const footerY = doc.page.height - 32;
+        const originalBottomMargin = doc.page.margins.bottom;
+
+        doc.page.margins.bottom = 0;
+
+        const footerPrefix = printContext
+          ? `Druckauftrag ${printContext.printJobId} · `
+          : `Bestellung ${order.orderNumber} · `;
 
         doc
           .font('Helvetica')
           .fontSize(8)
+          .fillColor('black')
           .text(
-            `Bestellung ${order.orderNumber} · Seite ${
+            `${footerPrefix}Seite ${
               pageIndex - pageRange.start + 1
             } von ${pageRange.count}`,
             left,
@@ -369,6 +430,8 @@ export class OrderPdfService {
               lineBreak: false,
             },
           );
+
+        doc.page.margins.bottom = originalBottomMargin;
       }
 
       doc.end();

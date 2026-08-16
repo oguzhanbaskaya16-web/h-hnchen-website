@@ -383,6 +383,14 @@ export class OrdersService {
               createdAt: now,
             },
           },
+
+          printJob: {
+            create: {
+              status: 'PENDING',
+              attempts: 0,
+              maxAttempts: 3,
+            },
+          },
         },
       });
 

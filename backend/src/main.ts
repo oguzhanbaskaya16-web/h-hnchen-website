@@ -11,7 +11,7 @@ async function bootstrap() {
   app.enableCors({
     origin: frontendUrl,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   app.useGlobalFilters(new PrismaExceptionFilter());
