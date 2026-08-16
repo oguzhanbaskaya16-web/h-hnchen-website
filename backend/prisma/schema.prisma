@@ -8,6 +8,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum PrintJobStatus {
+  PENDING
+  PRINTING
+  PRINTED
+  FAILED
+}
+
 model Restaurant {
   id               Int               @id @default(autoincrement()) @map("restaurant_id")
   name             String            @db.VarChar(100)
@@ -183,28 +190,55 @@ model OrderStatus {
 }
 
 model Order {
-  id             Int                  @id @default(autoincrement()) @map("bestellung_id")
-  cartId         Int?                 @map("warenkorb_id")
-  orderStatusId  Int                  @map("bestellstatus_id")
-  orderNumber    String               @unique @map("bestellnummer") @db.VarChar(30)
-  orderType      String               @map("bestellart") @db.VarChar(20)
-  orderedAt      DateTime             @map("bestellt_am")
-  requestedTime  DateTime             @map("gewuenschter_zeitpunkt")
-  subtotal       Decimal              @map("warenwert") @db.Decimal(10, 2)
-  deliveryFee    Decimal              @default(0.00) @map("liefergebuehr") @db.Decimal(10, 2)
-  discountAmount Decimal              @default(0.00) @map("rabattbetrag") @db.Decimal(10, 2)
-  totalAmount    Decimal              @map("gesamtbetrag") @db.Decimal(10, 2)
-  note           String?              @map("anmerkung") @db.Text
-  cart           Cart?                @relation(fields: [cartId], references: [id], onDelete: SetNull)
-  orderStatus    OrderStatus          @relation(fields: [orderStatusId], references: [id], onDelete: Restrict)
-  items          OrderItem[]
-  statusHistory  OrderStatusHistory[]
-  payments       Payment[]
-  customer       OrderCustomer?
-  address        OrderAddress?
-  notifications  Notification[]
+  id             Int      @id @default(autoincrement()) @map("bestellung_id")
+  cartId         Int?     @map("warenkorb_id")
+  orderStatusId  Int      @map("bestellstatus_id")
+  orderNumber    String   @unique @map("bestellnummer") @db.VarChar(30)
+  orderType      String   @map("bestellart") @db.VarChar(20)
+  orderedAt      DateTime @map("bestellt_am")
+  requestedTime  DateTime @map("gewuenschter_zeitpunkt")
+  subtotal       Decimal  @map("warenwert") @db.Decimal(10, 2)
+  deliveryFee    Decimal  @default(0.00) @map("liefergebuehr") @db.Decimal(10, 2)
+  discountAmount Decimal  @default(0.00) @map("rabattbetrag") @db.Decimal(10, 2)
+  totalAmount    Decimal  @map("gesamtbetrag") @db.Decimal(10, 2)
+  note           String?  @map("anmerkung") @db.Text
+
+  cart          Cart?                @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  orderStatus   OrderStatus          @relation(fields: [orderStatusId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payments      Payment[]
+  customer      OrderCustomer?
+  address       OrderAddress?
+  notifications Notification[]
+  printJob      PrintJob?
 
   @@map("bestellungen")
+}
+
+model PrintJob {
+  id             String         @id @default(uuid()) @map("druckauftrag_id") @db.Uuid
+  orderId        Int            @unique @map("bestellung_id")
+  status         PrintJobStatus @default(PENDING)
+  attempts       Int            @default(0) @map("druckversuche")
+  maxAttempts    Int            @default(3) @map("maximale_druckversuche")
+  createdAt      DateTime       @default(now()) @map("erstellt_am")
+  updatedAt      DateTime       @updatedAt @map("aktualisiert_am")
+  claimedAt      DateTime?      @map("reserviert_am")
+  leaseExpiresAt DateTime?      @map("reservierung_laeuft_ab")
+  printedAt      DateTime?      @map("gedruckt_am")
+  failedAt       DateTime?      @map("fehlgeschlagen_am")
+  nextAttemptAt  DateTime?      @map("naechster_versuch_am")
+  claimToken     String?        @unique @map("reservierungstoken") @db.Uuid
+  agentId        String?        @map("agent_id") @db.VarChar(100)
+  printerName    String?        @map("druckername") @db.VarChar(255)
+  lastError      String?        @map("letzter_fehler") @db.Text
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([leaseExpiresAt])
+  @@map("druckauftraege")
 }
 
 model OrderItem {

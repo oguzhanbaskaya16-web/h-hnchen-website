@@ -36,7 +36,15 @@ describe('HealthController (e2e)', () => {
       throw new Error('DATABASE_URL ist nicht gesetzt.');
     }
 
-    const adapter = new PrismaPg({ connectionString });
+    const adapter = new PrismaPg({
+      connectionString,
+      ssl:
+        process.env.DATABASE_SSL === 'true'
+          ? {
+              rejectUnauthorized: false,
+            }
+          : undefined,
+    });
     prisma = new PrismaClient({ adapter });
 
     const paymentMethod = await prisma.paymentMethod.findFirstOrThrow({
@@ -1976,7 +1984,6 @@ describe('HealthController (e2e)', () => {
           lastName: 'Mustermann',
           phone: '+49 170 1234567',
           email: 'max.mustermann@example.de',
-          email: 'max.mustermann@example.de',
         },
         note: 'Bitte gut durchgrillen.',
       })
@@ -1994,7 +2001,6 @@ describe('HealthController (e2e)', () => {
         firstName: 'Max',
         lastName: 'Mustermann',
         phone: '+49 170 1234567',
-        email: 'max.mustermann@example.de',
         email: 'max.mustermann@example.de',
       },
       note: 'Bitte gut durchgrillen.',
@@ -2023,6 +2029,7 @@ describe('HealthController (e2e)', () => {
       },
       include: {
         customer: true,
+        printJob: true,
       },
     });
 
@@ -2032,6 +2039,28 @@ describe('HealthController (e2e)', () => {
       phone: '+49 170 1234567',
       email: 'max.mustermann@example.de',
     });
+
+    expect(storedOrder.printJob).not.toBeNull();
+
+    expect(storedOrder.printJob).toMatchObject({
+      orderId: storedOrder.id,
+      status: 'PENDING',
+      attempts: 0,
+      maxAttempts: 3,
+      claimedAt: null,
+      leaseExpiresAt: null,
+      printedAt: null,
+      failedAt: null,
+      nextAttemptAt: null,
+      claimToken: null,
+      agentId: null,
+      printerName: null,
+      lastError: null,
+    });
+
+    expect(storedOrder.printJob?.id).toEqual(expect.any(String));
+    expect(storedOrder.printJob?.createdAt).toBeInstanceOf(Date);
+    expect(storedOrder.printJob?.updatedAt).toBeInstanceOf(Date);
   });
 
   it('/api/v1/orders/:orderNumber (GET) ruft die Bestellbestätigung ab', async () => {
@@ -2048,7 +2077,6 @@ describe('HealthController (e2e)', () => {
         lastName: 'Mustermann',
         phone: '+49 170 1234567',
         email: 'max.mustermann@example.de',
-        email: 'max.mustermann@example.de',
       },
       note: 'Bitte gut durchgrillen.',
       deliveryFee: '0.00',
@@ -2059,7 +2087,7 @@ describe('HealthController (e2e)', () => {
     expect(response.body.totalAmount).toBe(response.body.subtotal);
   });
 
-  it('/api/v1/orders (POST) verhindert eine doppelte Bestellung', async () => {
+  it('/api/v1/orders (POST) verhindert eine doppelte Bestellung und erzeugt keinen zweiten PrintJob', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/orders')
       .send({
@@ -2071,7 +2099,6 @@ describe('HealthController (e2e)', () => {
           lastName: 'Mustermann',
           phone: '+49 170 1234567',
           email: 'max.mustermann@example.de',
-          email: 'max.mustermann@example.de',
         },
       })
       .expect(409);
@@ -2080,6 +2107,25 @@ describe('HealthController (e2e)', () => {
       statusCode: 409,
       error: 'Conflict',
     });
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: {
+        orderNumber,
+      },
+      include: {
+        printJob: true,
+      },
+    });
+
+    expect(storedOrder.printJob).not.toBeNull();
+
+    const printJobCount = await prisma.printJob.count({
+      where: {
+        orderId: storedOrder.id,
+      },
+    });
+
+    expect(printJobCount).toBe(1);
   });
 
   it('/api/v1/orders (POST) lehnt einen leeren Warenkorb ab', async () => {
@@ -2097,7 +2143,6 @@ describe('HealthController (e2e)', () => {
           firstName: 'Erika',
           lastName: 'Musterfrau',
           phone: '+49 170 7654321',
-          email: 'erika.musterfrau@example.de',
           email: 'erika.musterfrau@example.de',
         },
       })
@@ -3337,6 +3382,17 @@ describe('HealthController (e2e)', () => {
     });
 
     expect(storedOrders).toBe(1);
+    const storedPrintJobs = await prisma.printJob.count({
+      where: {
+        order: {
+          cart: {
+            sessionId: orderData.cartId,
+          },
+        },
+      },
+    });
+
+    expect(storedPrintJobs).toBe(1);
   });
 
   it('/api/v1/orders (POST) verlangt eine Zahlungsart', async () => {
