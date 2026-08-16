@@ -3,12 +3,9 @@ import {
   PrintAgentApi,
   type ClaimedPrintJob,
   type PrintErrorType,
-} from './api.js';
-import { loadConfig } from './config.js';
-import {
-  outputPdf,
-  PrinterError,
-} from './printer.js';
+} from "./api.js";
+import { loadConfig } from "./config.js";
+import { outputPdf, PrinterError } from "./printer.js";
 
 const config = loadConfig();
 const api = new PrintAgentApi(config);
@@ -29,7 +26,7 @@ function errorMessage(error: unknown): string {
 
 function classifyError(error: unknown): PrintErrorType {
   if (error instanceof PrinterError) {
-    return 'PRINTER';
+    return "PRINTER";
   }
 
   if (
@@ -38,10 +35,10 @@ function classifyError(error: unknown): PrintErrorType {
     error.status >= 400 &&
     error.status < 500
   ) {
-    return 'PERMANENT';
+    return "PERMANENT";
   }
 
-  return 'NETWORK';
+  return "NETWORK";
 }
 
 async function reportFailure(
@@ -81,7 +78,7 @@ async function processNextJob(): Promise<void> {
   let outputCompleted = false;
 
   try {
-    const pdf = await api.downloadPdf(job.pdfPath);
+    const pdf = await api.downloadPdf(job);
     const outputPath = await outputPdf(config, job, pdf);
 
     outputCompleted = true;
@@ -131,7 +128,7 @@ async function run(): Promise<void> {
     }
   }
 
-  log('Print-Agent wurde beendet.');
+  log("Print-Agent wurde beendet.");
 }
 
 function requestShutdown(signal: string): void {
@@ -143,8 +140,8 @@ function requestShutdown(signal: string): void {
   log(`${signal} empfangen. Print-Agent wird beendet.`);
 }
 
-process.on('SIGINT', () => requestShutdown('SIGINT'));
-process.on('SIGTERM', () => requestShutdown('SIGTERM'));
+process.on("SIGINT", () => requestShutdown("SIGINT"));
+process.on("SIGTERM", () => requestShutdown("SIGTERM"));
 
 void run().catch((error: unknown) => {
   console.error(

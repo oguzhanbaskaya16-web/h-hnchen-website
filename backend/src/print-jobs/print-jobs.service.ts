@@ -10,6 +10,7 @@ import { ClaimPrintJobDto } from './dto/claim-print-job.dto';
 import { MarkPrintJobFailedDto } from './dto/mark-print-job-failed.dto';
 import { MarkPrintJobPrintedDto } from './dto/mark-print-job-printed.dto';
 import { RetryPrintJobDto } from './dto/retry-print-job.dto';
+import { OrderPdfService } from '../orders/order-pdf.service';
 
 const LEASE_DURATION_MS = 5 * 60 * 1000;
 const RETRY_DELAY_MS = 60 * 1000;
@@ -20,7 +21,10 @@ type ClaimCandidate = {
 
 @Injectable()
 export class PrintJobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orderPdfService: OrderPdfService,
+  ) {}
 
   async claim(dto: ClaimPrintJobDto) {
     const now = new Date();
@@ -123,9 +127,7 @@ export class PrintJobsService {
         leaseExpiresAt: printJob.leaseExpiresAt,
         agentId: printJob.agentId,
         printerName: printJob.printerName,
-        pdfPath: `/api/v1/orders/${encodeURIComponent(
-          printJob.order.orderNumber,
-        )}/pdf`,
+        pdfPath: `/api/v1/print-jobs/${encodeURIComponent(printJob.id)}/pdf`,
         order: {
           orderNumber: printJob.order.orderNumber,
           orderType: printJob.order.orderType,
@@ -158,6 +160,48 @@ export class PrintJobsService {
             : null,
         },
       },
+    };
+  }
+
+  async getPdf(id: string, claimToken: string, agentId: string) {
+    const printJob = await this.prisma.printJob.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        order: {
+          select: {
+            orderNumber: true,
+          },
+        },
+      },
+    });
+
+    if (!printJob) {
+      throw new NotFoundException('PrintJob wurde nicht gefunden.');
+    }
+
+    if (printJob.status !== PrintJobStatus.PRINTING) {
+      throw new ConflictException(
+        'Der PrintJob ist nicht mehr zum Drucken reserviert.',
+      );
+    }
+
+    this.assertOwnership(printJob, claimToken, agentId);
+
+    const pdf = await this.orderPdfService.generateOrderPdf(
+      printJob.order.orderNumber,
+      {
+        printJobId: printJob.id,
+        attempt: printJob.attempts,
+        maxAttempts: printJob.maxAttempts,
+      },
+    );
+
+    return {
+      pdf,
+      orderNumber: printJob.order.orderNumber,
+      attempt: printJob.attempts,
     };
   }
 

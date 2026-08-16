@@ -2377,6 +2377,11 @@ describe('HealthController (e2e)', () => {
     expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
     expect(pdfBuffer.length).toBeGreaterThan(100);
     expect(pdfBuffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+    const pageObjects =
+      pdfBuffer.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
+
+    expect(pageObjects).toHaveLength(1);
   });
 
   it('/api/v1/orders/:orderNumber/pdf (GET) behandelt unbekannte Bestellungen', async () => {
@@ -3704,7 +3709,9 @@ describe('HealthController (e2e)', () => {
         maxAttempts: 3,
         agentId,
         printerName,
-        pdfPath: expect.stringMatching(/^\/api\/v1\/orders\/.+\/pdf$/),
+        pdfPath: expect.stringMatching(
+          /^\/api\/v1\/print-jobs\/[0-9a-f-]+\/pdf$/,
+        ),
         order: {
           orderNumber: expect.any(String),
           orderType: 'ABHOLUNG',
@@ -3742,6 +3749,136 @@ describe('HealthController (e2e)', () => {
       });
 
       expect(storedJob.attempts).toBeGreaterThanOrEqual(1);
+    });
+
+    it('schützt den internen Druckbeleg und liefert genau eine PDF-Seite', async () => {
+      await createPrintableOrder();
+
+      const claimResponse = await claim();
+      const job = claimResponse.body.job;
+
+      expect(job).not.toBeNull();
+
+      await request(app.getHttpServer())
+        .get(job.pdfPath)
+        .set('X-Print-Claim-Token', job.claimToken)
+        .set('X-Print-Agent-Id', agentId)
+        .expect(401);
+
+      await request(app.getHttpServer())
+        .get(job.pdfPath)
+        .set('Authorization', authorization())
+        .set('X-Print-Claim-Token', crypto.randomUUID())
+        .set('X-Print-Agent-Id', agentId)
+        .expect(409);
+
+      await request(app.getHttpServer())
+        .get(job.pdfPath)
+        .set('Authorization', authorization())
+        .set('X-Print-Claim-Token', job.claimToken)
+        .set('X-Print-Agent-Id', secondAgentId)
+        .expect(409);
+
+      const response = await request(app.getHttpServer())
+        .get(job.pdfPath)
+        .set('Authorization', authorization())
+        .set('X-Print-Claim-Token', job.claimToken)
+        .set('X-Print-Agent-Id', agentId)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+
+          res.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
+
+          res.on('end', () => {
+            callback(null, Buffer.concat(chunks));
+          });
+        })
+        .expect(200);
+
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toContain(
+        `druckbeleg-${job.order.orderNumber}-versuch-${job.attempt}.pdf`,
+      );
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.headers['x-print-job-id']).toBe(job.id);
+      expect(response.headers['x-print-attempt']).toBe(String(job.attempt));
+      expect(response.headers['x-print-repeat']).toBe(
+        job.attempt > 1 ? 'true' : 'false',
+      );
+
+      const pdfBuffer = response.body as Buffer;
+
+      expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
+      expect(pdfBuffer.length).toBeGreaterThan(100);
+      expect(pdfBuffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+      const pageObjects =
+        pdfBuffer.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
+
+      expect(pageObjects).toHaveLength(1);
+    });
+
+    it('kennzeichnet einen erneut vergebenen Druckbeleg als Wiederholungsdruck', async () => {
+      await createPrintableOrder();
+
+      const firstClaimResponse = await claim();
+      const firstJob = firstClaimResponse.body.job;
+
+      expect(firstJob).not.toBeNull();
+
+      await prisma.printJob.update({
+        where: {
+          id: firstJob.id,
+        },
+        data: {
+          createdAt: new Date('1600-01-01T00:00:00.000Z'),
+          leaseExpiresAt: new Date(Date.now() - 1000),
+        },
+      });
+
+      const secondClaimResponse = await claim(
+        secondAgentId,
+        'E2E Wiederholungsdrucker',
+      );
+      const repeatedJob = secondClaimResponse.body.job;
+
+      expect(repeatedJob).not.toBeNull();
+      expect(repeatedJob.id).toBe(firstJob.id);
+      expect(repeatedJob.attempt).toBe(firstJob.attempt + 1);
+
+      const response = await request(app.getHttpServer())
+        .get(repeatedJob.pdfPath)
+        .set('Authorization', authorization())
+        .set('X-Print-Claim-Token', repeatedJob.claimToken)
+        .set('X-Print-Agent-Id', secondAgentId)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+
+          res.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
+
+          res.on('end', () => {
+            callback(null, Buffer.concat(chunks));
+          });
+        })
+        .expect(200);
+
+      expect(response.headers['x-print-job-id']).toBe(repeatedJob.id);
+      expect(response.headers['x-print-attempt']).toBe(
+        String(repeatedJob.attempt),
+      );
+      expect(response.headers['x-print-repeat']).toBe('true');
+
+      const pdfBuffer = response.body as Buffer;
+      const pageObjects =
+        pdfBuffer.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? [];
+
+      expect(pageObjects).toHaveLength(1);
     });
 
     it('bestätigt einen Ausdruck idempotent und lehnt fremde Reservierungen ab', async () => {

@@ -1,4 +1,4 @@
-import type { PrintAgentConfig } from './config.js';
+import type { PrintAgentConfig } from "./config.js";
 
 export type ClaimedPrintJob = {
   id: string;
@@ -43,10 +43,7 @@ type ClaimResponse = {
   job: ClaimedPrintJob | null;
 };
 
-export type PrintErrorType =
-  | 'NETWORK'
-  | 'PRINTER'
-  | 'PERMANENT';
+export type PrintErrorType = "NETWORK" | "PRINTER" | "PERMANENT";
 
 export class ApiError extends Error {
   constructor(
@@ -54,7 +51,7 @@ export class ApiError extends Error {
     readonly status: number | null,
   ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
@@ -62,29 +59,30 @@ export class PrintAgentApi {
   constructor(private readonly config: PrintAgentConfig) {}
 
   claim(): Promise<ClaimResponse> {
-    return this.requestJson<ClaimResponse>(
-      '/api/v1/print-jobs/claim',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          agentId: this.config.agentId,
-          printerName: this.config.printerName,
-        }),
-      },
-    );
+    return this.requestJson<ClaimResponse>("/api/v1/print-jobs/claim", {
+      method: "POST",
+      body: JSON.stringify({
+        agentId: this.config.agentId,
+        printerName: this.config.printerName,
+      }),
+    });
   }
 
-  async downloadPdf(pdfPath: string): Promise<Uint8Array> {
-    const response = await this.request(pdfPath, {
-      method: 'GET',
+  async downloadPdf(job: ClaimedPrintJob): Promise<Uint8Array> {
+    const response = await this.request(job.pdfPath, {
+      method: "GET",
+      headers: {
+        "X-Print-Claim-Token": job.claimToken,
+        "X-Print-Agent-Id": this.config.agentId,
+      },
     });
 
     const contentType =
-      response.headers.get('content-type')?.toLowerCase() ?? '';
+      response.headers.get("content-type")?.toLowerCase() ?? "";
 
-    if (!contentType.includes('application/pdf')) {
+    if (!contentType.includes("application/pdf")) {
       throw new ApiError(
-        `Unerwarteter PDF-Inhaltstyp: ${contentType || 'unbekannt'}`,
+        `Unerwarteter PDF-Inhaltstyp: ${contentType || "unbekannt"}`,
         response.status,
       );
     }
@@ -92,9 +90,9 @@ export class PrintAgentApi {
     const bytes = new Uint8Array(await response.arrayBuffer());
     const signature = new TextDecoder().decode(bytes.slice(0, 5));
 
-    if (signature !== '%PDF-') {
+    if (signature !== "%PDF-") {
       throw new ApiError(
-        'Die heruntergeladene Datei ist kein gültiges PDF.',
+        "Die heruntergeladene Datei ist kein gültiges PDF.",
         response.status,
       );
     }
@@ -106,7 +104,7 @@ export class PrintAgentApi {
     return this.requestJson(
       `/api/v1/print-jobs/${encodeURIComponent(job.id)}/printed`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           claimToken: job.claimToken,
           agentId: this.config.agentId,
@@ -124,7 +122,7 @@ export class PrintAgentApi {
     return this.requestJson(
       `/api/v1/print-jobs/${encodeURIComponent(job.id)}/failed`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           claimToken: job.claimToken,
           agentId: this.config.agentId,
@@ -136,17 +134,14 @@ export class PrintAgentApi {
     );
   }
 
-  private async requestJson<T>(
-    path: string,
-    init: RequestInit,
-  ): Promise<T> {
+  private async requestJson<T>(path: string, init: RequestInit): Promise<T> {
     const response = await this.request(path, init);
 
     try {
       return (await response.json()) as T;
     } catch {
       throw new ApiError(
-        'Das Backend lieferte keine gültige JSON-Antwort.',
+        "Das Backend lieferte keine gültige JSON-Antwort.",
         response.status,
       );
     }
@@ -156,10 +151,7 @@ export class PrintAgentApi {
     requestPath: string,
     init: RequestInit,
   ): Promise<Response> {
-    const url = new URL(
-      requestPath,
-      `${this.config.backendUrl}/`,
-    );
+    const url = new URL(requestPath, `${this.config.backendUrl}/`);
 
     let response: Response;
 
@@ -168,10 +160,8 @@ export class PrintAgentApi {
         ...init,
         headers: {
           Authorization: `Bearer ${this.config.token}`,
-          Accept: 'application/json, application/pdf',
-          ...(init.body
-            ? { 'Content-Type': 'application/json' }
-            : {}),
+          Accept: "application/json, application/pdf",
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
           ...init.headers,
         },
         signal: AbortSignal.timeout(15000),
@@ -180,7 +170,7 @@ export class PrintAgentApi {
       throw new ApiError(
         error instanceof Error
           ? `Backend nicht erreichbar: ${error.message}`
-          : 'Backend nicht erreichbar.',
+          : "Backend nicht erreichbar.",
         null,
       );
     }

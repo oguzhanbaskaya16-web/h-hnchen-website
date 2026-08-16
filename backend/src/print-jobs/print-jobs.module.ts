@@ -1,9 +1,11 @@
 import { Module, OnModuleInit } from '@nestjs/common';
+import { OrdersModule } from '../orders/orders.module';
 import { PrintAgentAuthGuard } from './guards/print-agent-auth.guard';
 import { PrintJobsController } from './print-jobs.controller';
 import { PrintJobsService } from './print-jobs.service';
 
 @Module({
+  imports: [OrdersModule],
   controllers: [PrintJobsController],
   providers: [PrintJobsService, PrintAgentAuthGuard],
 })
