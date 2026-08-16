@@ -3581,6 +3581,372 @@ describe('HealthController (e2e)', () => {
     );
   });
 
+  describe('Print-Agent-API', () => {
+    const agentId = 'E2E-AGENT-01';
+    const secondAgentId = 'E2E-AGENT-02';
+    const printerName = 'E2E Testdrucker';
+
+    const authorization = () => {
+      const token = process.env.PRINT_AGENT_TOKEN;
+
+      if (!token) {
+        throw new Error('PRINT_AGENT_TOKEN fehlt für die E2E-Tests.');
+      }
+
+      return `Bearer ${token}`;
+    };
+
+    const createPrintableOrder = async () => {
+      const { product, optionIds } = await getConfiguredProduct();
+
+      const cartResponse = await request(app.getHttpServer())
+        .post('/api/v1/carts')
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/carts/${cartResponse.body.cartId}/items`)
+        .send({
+          productId: product.id,
+          quantity: 1,
+          optionIds,
+        })
+        .expect(201);
+
+      return request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .send({
+          cartId: cartResponse.body.cartId,
+          paymentMethodId,
+          requestedTime: getValidRequestedTime(),
+          customer: {
+            firstName: 'Print',
+            lastName: 'Agenttest',
+            phone: '+49 170 1112233',
+            email: `print-${crypto.randomUUID()}@example.de`,
+          },
+          note: 'Automatischer PrintJob-E2E-Test.',
+        })
+        .expect(201);
+    };
+
+    const claim = (
+      currentAgentId = agentId,
+      currentPrinterName = printerName,
+    ) =>
+      request(app.getHttpServer())
+        .post('/api/v1/print-jobs/claim')
+        .set('Authorization', authorization())
+        .send({
+          agentId: currentAgentId,
+          printerName: currentPrinterName,
+        })
+        .expect(200);
+
+    it('lehnt einen Claim ohne Token ab', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/print-jobs/claim')
+        .send({
+          agentId,
+          printerName,
+        })
+        .expect(401);
+
+      expect(response.body).toMatchObject({
+        statusCode: 401,
+        error: 'Unauthorized',
+      });
+    });
+
+    it('lehnt einen Claim mit falschem Token ab', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/print-jobs/claim')
+        .set('Authorization', 'Bearer falsches-token-mit-mindestens-32-zeichen')
+        .send({
+          agentId,
+          printerName,
+        })
+        .expect(401);
+
+      expect(response.body).toMatchObject({
+        statusCode: 401,
+        error: 'Unauthorized',
+      });
+    });
+
+    it('validiert die Claim-Daten', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/print-jobs/claim')
+        .set('Authorization', authorization())
+        .send({
+          agentId: '',
+          printerName: '',
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({
+        statusCode: 400,
+        error: 'Bad Request',
+      });
+    });
+
+    it('reserviert einen PrintJob mit fünfminütiger Lease', async () => {
+      await createPrintableOrder();
+
+      const beforeClaim = Date.now();
+      const response = await claim();
+      const afterClaim = Date.now();
+
+      expect(response.body.job).not.toBeNull();
+      expect(response.body.job).toMatchObject({
+        id: expect.any(String),
+        claimToken: expect.any(String),
+        attempt: expect.any(Number),
+        maxAttempts: 3,
+        agentId,
+        printerName,
+        pdfPath: expect.stringMatching(/^\/api\/v1\/orders\/.+\/pdf$/),
+        order: {
+          orderNumber: expect.any(String),
+          orderType: 'ABHOLUNG',
+          customer: {
+            firstName: expect.any(String),
+            lastName: expect.any(String),
+            phone: expect.any(String),
+          },
+          items: expect.any(Array),
+          subtotal: expect.stringMatching(/^\d+\.\d{2}$/),
+          totalAmount: expect.stringMatching(/^\d+\.\d{2}$/),
+        },
+      });
+
+      expect(response.body.job.order.customer).not.toHaveProperty('email');
+
+      const claimedAt = Date.parse(response.body.job.claimedAt);
+      const leaseExpiresAt = Date.parse(response.body.job.leaseExpiresAt);
+
+      expect(claimedAt).toBeGreaterThanOrEqual(beforeClaim);
+      expect(claimedAt).toBeLessThanOrEqual(afterClaim);
+      expect(leaseExpiresAt - claimedAt).toBe(5 * 60 * 1000);
+
+      const storedJob = await prisma.printJob.findUniqueOrThrow({
+        where: {
+          id: response.body.job.id,
+        },
+      });
+
+      expect(storedJob).toMatchObject({
+        status: 'PRINTING',
+        claimToken: response.body.job.claimToken,
+        agentId,
+        printerName,
+      });
+
+      expect(storedJob.attempts).toBeGreaterThanOrEqual(1);
+    });
+
+    it('bestätigt einen Ausdruck idempotent und lehnt fremde Reservierungen ab', async () => {
+      await createPrintableOrder();
+
+      const claimResponse = await claim();
+      const job = claimResponse.body.job;
+
+      expect(job).not.toBeNull();
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/printed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: crypto.randomUUID(),
+          agentId,
+          printerName,
+        })
+        .expect(409);
+
+      const firstResponse = await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/printed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: job.claimToken,
+          agentId,
+          printerName,
+        })
+        .expect(200);
+
+      expect(firstResponse.body).toMatchObject({
+        id: job.id,
+        status: 'PRINTED',
+        attempts: job.attempt,
+        maxAttempts: 3,
+        lastError: null,
+      });
+
+      expect(firstResponse.body.printedAt).toEqual(expect.any(String));
+
+      const repeatedResponse = await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/printed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: job.claimToken,
+          agentId,
+          printerName,
+        })
+        .expect(200);
+
+      expect(repeatedResponse.body).toMatchObject({
+        id: job.id,
+        status: 'PRINTED',
+        printedAt: firstResponse.body.printedAt,
+      });
+    });
+
+    it('wiederholt Druckerfehler nach 60 Sekunden und stoppt nach drei Versuchen', async () => {
+      await createPrintableOrder();
+
+      let claimResponse = await claim();
+      let job = claimResponse.body.job;
+
+      expect(job).not.toBeNull();
+
+      for (
+        let expectedAttempt = job.attempt;
+        expectedAttempt <= 3;
+        expectedAttempt += 1
+      ) {
+        expect(job.attempt).toBe(expectedAttempt);
+
+        const failedResponse = await request(app.getHttpServer())
+          .post(`/api/v1/print-jobs/${job.id}/failed`)
+          .set('Authorization', authorization())
+          .send({
+            claimToken: job.claimToken,
+            agentId,
+            printerName,
+            errorType: 'PRINTER',
+            error: 'Der E2E-Testdrucker ist nicht erreichbar.',
+          })
+          .expect(200);
+
+        if (expectedAttempt >= 3) {
+          expect(failedResponse.body).toMatchObject({
+            id: job.id,
+            status: 'FAILED',
+            attempts: 3,
+            maxAttempts: 3,
+          });
+
+          expect(failedResponse.body.failedAt).toEqual(expect.any(String));
+          expect(failedResponse.body.nextAttemptAt).toBeNull();
+          break;
+        }
+
+        expect(failedResponse.body).toMatchObject({
+          id: job.id,
+          status: 'PENDING',
+          attempts: expectedAttempt,
+          maxAttempts: 3,
+        });
+
+        const nextAttemptAt = Date.parse(failedResponse.body.nextAttemptAt);
+
+        expect(nextAttemptAt).toBeGreaterThan(Date.now());
+
+        await prisma.printJob.update({
+          where: {
+            id: job.id,
+          },
+          data: {
+            createdAt: new Date('1900-01-01T00:00:00.000Z'),
+            nextAttemptAt: new Date(Date.now() - 1000),
+          },
+        });
+
+        claimResponse = await claim();
+        job = claimResponse.body.job;
+
+        expect(job.id).toBe(failedResponse.body.id);
+      }
+    });
+
+    it('setzt einen permanenten Fehler ohne automatische Wiederholung auf FAILED', async () => {
+      await createPrintableOrder();
+
+      const claimResponse = await claim();
+      const job = claimResponse.body.job;
+
+      expect(job).not.toBeNull();
+
+      const response = await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/failed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: job.claimToken,
+          agentId,
+          printerName,
+          errorType: 'PERMANENT',
+          error: 'Das Druckdokument kann nicht verarbeitet werden.',
+        })
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        id: job.id,
+        status: 'FAILED',
+        attempts: job.attempt,
+        maxAttempts: 3,
+        nextAttemptAt: null,
+      });
+
+      expect(response.body.failedAt).toEqual(expect.any(String));
+      expect(response.body.lastError).toContain('[PERMANENT]');
+    });
+
+    it('vergibt einen PrintJob nach Ablauf seiner Lease erneut', async () => {
+      await createPrintableOrder();
+
+      const firstClaim = await claim();
+      const firstJob = firstClaim.body.job;
+
+      expect(firstJob).not.toBeNull();
+
+      await prisma.printJob.update({
+        where: {
+          id: firstJob.id,
+        },
+        data: {
+          createdAt: new Date('1800-01-01T00:00:00.000Z'),
+          leaseExpiresAt: new Date(Date.now() - 1000),
+        },
+      });
+
+      const secondClaim = await claim(secondAgentId);
+      const secondJob = secondClaim.body.job;
+
+      expect(secondJob).not.toBeNull();
+      expect(secondJob.id).toBe(firstJob.id);
+      expect(secondJob.claimToken).not.toBe(firstJob.claimToken);
+      expect(secondJob.agentId).toBe(secondAgentId);
+      expect(secondJob.attempt).toBe(firstJob.attempt + 1);
+    });
+
+    it('vergibt denselben PrintJob nicht parallel an zwei Agenten', async () => {
+      await createPrintableOrder();
+
+      const [firstResponse, secondResponse] = await Promise.all([
+        claim(agentId, 'E2E Drucker 1'),
+        claim(secondAgentId, 'E2E Drucker 2'),
+      ]);
+
+      const jobs = [firstResponse.body.job, secondResponse.body.job].filter(
+        (job): job is { id: string } => job !== null,
+      );
+
+      expect(jobs.length).toBeGreaterThanOrEqual(1);
+
+      if (jobs.length === 2) {
+        expect(jobs[0].id).not.toBe(jobs[1].id);
+      }
+    });
+  });
+
   afterAll(async () => {
     await app.close();
     await prisma.$disconnect();
