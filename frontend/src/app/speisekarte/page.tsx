@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 type KategorieFilter = "alle" | "highlights" | number;
 
 const CART_ID_SPEICHER = "palmen-grill-cart-id";
+const WARENKORB_EVENT = "palmen-warenkorb-aktualisiert";
 
 export default function SpeisekartePage() {
   const router = useRouter();
@@ -186,6 +187,14 @@ export default function SpeisekartePage() {
       (summe, position) => summe + position.quantity,
       0,
     ) ?? 0;
+
+  useEffect(() => {
+    if (!warenkorbGeladen) {
+      return;
+    }
+
+    window.dispatchEvent(new Event(WARENKORB_EVENT));
+  }, [artikelanzahl, warenkorbGeladen]);
 
   function produktAuswaehlen(produkt: MenuProduct) {
     setAusgewaehltesProdukt(produkt);
@@ -435,7 +444,11 @@ export default function SpeisekartePage() {
           )}
         </section>
 
-        <aside className={styles.cart} aria-label="Warenkorb">
+        <aside
+          id="warenkorb"
+          className={styles.cart}
+          aria-label="Warenkorb"
+        >
           <div className={styles.cartTitle}>
             <div>
               <p>DEINE BESTELLUNG</p>

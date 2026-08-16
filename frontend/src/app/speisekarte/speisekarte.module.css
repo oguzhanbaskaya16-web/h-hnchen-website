@@ -661,6 +661,7 @@
     height: auto;
     min-height: 0;
     position: static;
+    scroll-margin-top: 135px;
   }
 
   .cartBody {
