@@ -13,6 +13,7 @@ import { MarkPrintJobFailedDto } from './dto/mark-print-job-failed.dto';
 import { MarkPrintJobPrintedDto } from './dto/mark-print-job-printed.dto';
 import { PrintAgentAuthGuard } from './guards/print-agent-auth.guard';
 import { PrintJobsService } from './print-jobs.service';
+import { RetryPrintJobDto } from './dto/retry-print-job.dto';
 
 @Controller('print-jobs')
 @UseGuards(PrintAgentAuthGuard)
@@ -41,5 +42,14 @@ export class PrintJobsController {
     @Body() dto: MarkPrintJobFailedDto,
   ) {
     return this.printJobsService.markFailed(id, dto);
+  }
+
+  @Post(':id/retry')
+  @HttpCode(HttpStatus.OK)
+  retry(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: RetryPrintJobDto,
+  ) {
+    return this.printJobsService.retry(id, dto);
   }
 }

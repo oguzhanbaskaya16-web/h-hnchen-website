@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClaimPrintJobDto } from './dto/claim-print-job.dto';
 import { MarkPrintJobFailedDto } from './dto/mark-print-job-failed.dto';
 import { MarkPrintJobPrintedDto } from './dto/mark-print-job-printed.dto';
+import { RetryPrintJobDto } from './dto/retry-print-job.dto';
 
 const LEASE_DURATION_MS = 5 * 60 * 1000;
 const RETRY_DELAY_MS = 60 * 1000;
@@ -245,6 +246,44 @@ export class PrintJobsService {
         failedAt: retryable ? null : now,
         printerName: dto.printerName,
         lastError: `[${dto.errorType}] ${dto.error}`,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new ConflictException(
+        'Der PrintJob wurde zwischenzeitlich verändert.',
+      );
+    }
+
+    return this.statusResponse(await this.findPrintJob(id));
+  }
+
+  async retry(id: string, dto: RetryPrintJobDto) {
+    const printJob = await this.findPrintJob(id);
+
+    if (printJob.status !== PrintJobStatus.FAILED) {
+      throw new ConflictException(
+        'Nur endgültig fehlgeschlagene PrintJobs können manuell wiederholt werden.',
+      );
+    }
+
+    const updated = await this.prisma.printJob.updateMany({
+      where: {
+        id,
+        status: PrintJobStatus.FAILED,
+      },
+      data: {
+        status: PrintJobStatus.PENDING,
+        attempts: 0,
+        claimedAt: null,
+        leaseExpiresAt: null,
+        printedAt: null,
+        failedAt: null,
+        nextAttemptAt: null,
+        claimToken: null,
+        agentId: null,
+        printerName: null,
+        lastError: `[MANUAL_RETRY] ${dto.reason}`,
       },
     });
 

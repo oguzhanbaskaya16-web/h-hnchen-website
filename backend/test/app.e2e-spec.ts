@@ -3945,6 +3945,104 @@ describe('HealthController (e2e)', () => {
         expect(jobs[0].id).not.toBe(jobs[1].id);
       }
     });
+
+    it('setzt einen endgültig fehlgeschlagenen PrintJob manuell zurück', async () => {
+      await createPrintableOrder();
+
+      const firstClaim = await claim();
+      const job = firstClaim.body.job;
+
+      expect(job).not.toBeNull();
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/failed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: job.claimToken,
+          agentId,
+          printerName,
+          errorType: 'PERMANENT',
+          error: 'Manueller Retry-E2E-Test.',
+        })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/retry`)
+        .set('Authorization', authorization())
+        .send({
+          reason: '',
+        })
+        .expect(400);
+
+      const retryResponse = await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/retry`)
+        .set('Authorization', authorization())
+        .send({
+          reason: 'Drucker wurde geprüft und wieder freigegeben.',
+        })
+        .expect(200);
+
+      expect(retryResponse.body).toMatchObject({
+        id: job.id,
+        status: 'PENDING',
+        attempts: 0,
+        maxAttempts: 3,
+        printedAt: null,
+        failedAt: null,
+        nextAttemptAt: null,
+        lastError:
+          '[MANUAL_RETRY] Drucker wurde geprüft und wieder freigegeben.',
+      });
+
+      const storedJob = await prisma.printJob.findUniqueOrThrow({
+        where: {
+          id: job.id,
+        },
+      });
+
+      expect(storedJob).toMatchObject({
+        status: 'PENDING',
+        attempts: 0,
+        claimToken: null,
+        agentId: null,
+        printerName: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
+      });
+
+      await prisma.printJob.update({
+        where: {
+          id: job.id,
+        },
+        data: {
+          createdAt: new Date('1700-01-01T00:00:00.000Z'),
+        },
+      });
+
+      const secondClaim = await claim();
+      const reclaimedJob = secondClaim.body.job;
+
+      expect(reclaimedJob.id).toBe(job.id);
+      expect(reclaimedJob.attempt).toBe(1);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/printed`)
+        .set('Authorization', authorization())
+        .send({
+          claimToken: reclaimedJob.claimToken,
+          agentId,
+          printerName,
+        })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/print-jobs/${job.id}/retry`)
+        .set('Authorization', authorization())
+        .send({
+          reason: 'Dieser Retry darf nicht akzeptiert werden.',
+        })
+        .expect(409);
+    });
   });
 
   afterAll(async () => {
