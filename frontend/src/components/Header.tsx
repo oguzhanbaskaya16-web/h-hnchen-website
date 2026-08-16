@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import CartCounter from "./CartCounter";
@@ -13,7 +14,37 @@ const navigation = [
 
 export default function Header() {
   const pathname = usePathname();
-  const showCart = pathname === "/speisekarte" || pathname === "/bestellen";
+
+  const showCart =
+    pathname === "/speisekarte" || pathname === "/bestellen";
+
+  function zumWarenkorbScrollen(
+    event: MouseEvent<HTMLAnchorElement>,
+  ) {
+    if (pathname !== "/speisekarte") {
+      return;
+    }
+
+    const warenkorbBereich =
+      document.getElementById("warenkorb");
+
+    if (!warenkorbBereich) {
+      return;
+    }
+
+    event.preventDefault();
+
+    warenkorbBereich.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+
+    window.history.replaceState(
+      null,
+      "",
+      "/speisekarte#warenkorb",
+    );
+  }
 
   if (pathname === "/bestaetigung") {
     return null;
@@ -22,11 +53,20 @@ export default function Header() {
   return (
     <>
       <div className={styles.openingBar}>
-        <span className={styles.statusDot} aria-hidden="true" />
+        <span
+          className={styles.statusDot}
+          aria-hidden="true"
+        />
+
         Heute geöffnet
-        <span className={styles.divider} aria-hidden="true">
+
+        <span
+          className={styles.divider}
+          aria-hidden="true"
+        >
           •
         </span>
+
         11:00–21:00 Uhr
       </div>
 
@@ -37,16 +77,23 @@ export default function Header() {
             className={styles.brand}
             aria-label="Zur Startseite von Palmen Grill"
           >
-            <span className={styles.brandIcon} aria-hidden="true">
+            <span
+              className={styles.brandIcon}
+              aria-hidden="true"
+            >
               🌴
             </span>
+
             <span className={styles.brandText}>
               <strong>PALMEN GRILL</strong>
               <small>Frisch vom Grill</small>
             </span>
           </Link>
 
-          <nav className={styles.mainNav} aria-label="Hauptnavigation">
+          <nav
+            className={styles.mainNav}
+            aria-label="Hauptnavigation"
+          >
             {navigation.map((item) => {
               const isActive =
                 item.href === "/"
@@ -57,8 +104,12 @@ export default function Header() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={isActive ? styles.active : undefined}
-                  aria-current={isActive ? "page" : undefined}
+                  className={
+                    isActive ? styles.active : undefined
+                  }
+                  aria-current={
+                    isActive ? "page" : undefined
+                  }
                 >
                   {item.name}
                 </Link>
@@ -68,17 +119,25 @@ export default function Header() {
 
           {showCart ? (
             <Link
-              href="/bestellen"
+              href="/speisekarte#warenkorb"
               className={styles.cartLink}
-              aria-label="Warenkorb öffnen"
+              aria-label="Zum Warenkorb springen"
+              onClick={zumWarenkorbScrollen}
             >
-              <span className={styles.cartIcon} aria-hidden="true">
+              <span
+                className={styles.cartIcon}
+                aria-hidden="true"
+              >
                 🛒
               </span>
+
               <CartCounter />
             </Link>
           ) : (
-            <Link href="/speisekarte" className={styles.orderLink}>
+            <Link
+              href="/speisekarte"
+              className={styles.orderLink}
+            >
               Jetzt bestellen
             </Link>
           )}

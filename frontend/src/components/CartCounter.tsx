@@ -1,45 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getCart } from "@/lib/api";
 
-const WARENKORB_SPEICHER =
-  "palmen-grill-warenkorb";
+const CART_ID_SPEICHER = "palmen-grill-cart-id";
+const WARENKORB_EVENT = "palmen-warenkorb-aktualisiert";
 
-const WARENKORB_EVENT =
-  "palmen-warenkorb-aktualisiert";
+async function ermittleArtikelanzahl(): Promise<number> {
+  const cartId = window.localStorage.getItem(CART_ID_SPEICHER);
 
-type GespeichertePosition = {
-  menge?: unknown;
-};
+  if (!cartId) {
+    return 0;
+  }
 
-function ermittleArtikelanzahl() {
   try {
-    const gespeicherterWarenkorb =
-      window.localStorage.getItem(
-        WARENKORB_SPEICHER,
-      );
+    const warenkorb = await getCart(cartId);
 
-    if (!gespeicherterWarenkorb) {
-      return 0;
-    }
-
-    const positionen: unknown = JSON.parse(
-      gespeicherterWarenkorb,
-    );
-
-    if (!Array.isArray(positionen)) {
-      return 0;
-    }
-
-    return positionen.reduce(
-      (summe: number, position: GespeichertePosition) => {
-        return (
-          summe +
-          (typeof position.menge === "number"
-            ? position.menge
-            : 0)
-        );
-      },
+    return warenkorb.items.reduce(
+      (summe, position) => summe + position.quantity,
       0,
     );
   } catch {
@@ -48,29 +26,32 @@ function ermittleArtikelanzahl() {
 }
 
 export default function CartCounter() {
-  const [artikelanzahl, setArtikelanzahl] =
-    useState(0);
+  const [artikelanzahl, setArtikelanzahl] = useState(0);
 
   useEffect(() => {
+    let aktiv = true;
+
+    async function artikelanzahlLaden() {
+      const anzahl = await ermittleArtikelanzahl();
+
+      if (aktiv) {
+        setArtikelanzahl(anzahl);
+      }
+    }
+
     function aktualisieren() {
-      setArtikelanzahl(
-        ermittleArtikelanzahl(),
-      );
+      void artikelanzahlLaden();
     }
 
     aktualisieren();
 
-    window.addEventListener(
-      WARENKORB_EVENT,
-      aktualisieren,
-    );
-
-    window.addEventListener(
-      "storage",
-      aktualisieren,
-    );
+    window.addEventListener(WARENKORB_EVENT, aktualisieren);
+    window.addEventListener("storage", aktualisieren);
+    window.addEventListener("focus", aktualisieren);
 
     return () => {
+      aktiv = false;
+
       window.removeEventListener(
         WARENKORB_EVENT,
         aktualisieren,
@@ -80,15 +61,17 @@ export default function CartCounter() {
         "storage",
         aktualisieren,
       );
+
+      window.removeEventListener(
+        "focus",
+        aktualisieren,
+      );
     };
   }, []);
 
   return (
-    <span>
-      {artikelanzahl}{" "}
-      {artikelanzahl === 1
-        ? "Artikel"
-        : "Artikel"}
+    <span aria-live="polite">
+      {artikelanzahl} Artikel
     </span>
   );
 }
