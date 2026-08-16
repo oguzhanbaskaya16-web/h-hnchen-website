@@ -52,6 +52,8 @@ test("outputPdf speichert im save-Modus eine unveränderte PDF", async () => {
     outputDirectory,
     printExecutable: null,
     printTimeoutMs: 30000,
+    logDirectory: path.join(outputDirectory, "logs"),
+    logRetentionDays: 14,
   };
   const job = {
     id: "11111111-1111-4111-8111-111111111111",

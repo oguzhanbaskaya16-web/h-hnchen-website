@@ -5,30 +5,31 @@ import {
   type PrintErrorType,
 } from "./api.js";
 import { loadConfig } from "./config.js";
+import { createLogger, type AgentLogger } from "./logger.js";
 import { outputPdf, PrinterError } from "./printer.js";
 
 const config = loadConfig();
 const api = new PrintAgentApi(config);
 
 let shuttingDown = false;
+let logger: AgentLogger | null = null;
 
 function log(message: string): void {
-  console.log(`[${new Date().toISOString()}] ${message}`);
+  if (logger) logger.log(message);
+  else console.log(`[${new Date().toISOString()}] ${message}`);
+}
+
+function logError(message: string): void {
+  if (logger) logger.error(message);
+  else console.error(`[${new Date().toISOString()}] ${message}`);
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
 function classifyError(error: unknown): PrintErrorType {
-  if (error instanceof PrinterError) {
-    return "PRINTER";
-  }
-
+  if (error instanceof PrinterError) return "PRINTER";
   if (
     error instanceof ApiError &&
     error.status !== null &&
@@ -37,7 +38,6 @@ function classifyError(error: unknown): PrintErrorType {
   ) {
     return "PERMANENT";
   }
-
   return "NETWORK";
 }
 
@@ -47,14 +47,13 @@ async function reportFailure(
 ): Promise<void> {
   const message = errorMessage(error);
   const errorType = classifyError(error);
-
   try {
     await api.markFailed(job, errorType, message);
     log(
       `PrintJob ${job.id} wurde als ${errorType}-Fehler gemeldet: ${message}`,
     );
   } catch (reportError) {
-    log(
+    logError(
       `Fehlerstatus für PrintJob ${job.id} konnte nicht gemeldet werden: ${errorMessage(
         reportError,
       )}`,
@@ -65,10 +64,7 @@ async function reportFailure(
 async function processNextJob(): Promise<void> {
   const response = await api.claim();
   const job = response.job;
-
-  if (!job) {
-    return;
-  }
+  if (!job) return;
 
   log(
     `PrintJob ${job.id} für Bestellung ${job.order.orderNumber} reserviert ` +
@@ -76,66 +72,61 @@ async function processNextJob(): Promise<void> {
   );
 
   let outputCompleted = false;
-
   try {
     const pdf = await api.downloadPdf(job);
     const outputPath = await outputPdf(config, job, pdf);
-
     outputCompleted = true;
 
-    log(`PrintJob ${job.id} wurde gespeichert: ${outputPath}`);
+    log(
+      config.mode === "print"
+        ? `PrintJob ${job.id} wurde an ${config.printerName} übergeben: ${outputPath}`
+        : `PrintJob ${job.id} wurde gespeichert: ${outputPath}`,
+    );
 
     await api.markPrinted(job);
-
     log(`PrintJob ${job.id} wurde erfolgreich bestätigt.`);
   } catch (error) {
     if (outputCompleted) {
-      log(
+      logError(
         `UNSICHERER STATUS für PrintJob ${job.id}: Die PDF-Ausgabe war erfolgreich, ` +
           `aber die Bestätigung ist fehlgeschlagen. Der Job wird nicht als Fehler gemeldet. ` +
           `Nach Ablauf der Lease kann ein gekennzeichneter Wiederholungsdruck entstehen. ` +
           `Ursache: ${errorMessage(error)}`,
       );
-
       return;
     }
-
     await reportFailure(job, error);
   }
 }
 
 function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function run(): Promise<void> {
+  logger = await createLogger(config.logDirectory, config.logRetentionDays);
+
   log(`Print-Agent ${config.agentId} startet.`);
   log(`Backend: ${config.backendUrl}`);
   log(`Drucker/Modus: ${config.printerName} / ${config.mode}`);
   log(`Polling-Intervall: ${config.pollIntervalMs} ms`);
+  log(`Logs: ${config.logDirectory} (${config.logRetentionDays} Tage)`);
 
   while (!shuttingDown) {
     try {
       await processNextJob();
     } catch (error) {
-      log(`Polling-Fehler: ${errorMessage(error)}`);
+      logError(`Polling-Fehler: ${errorMessage(error)}`);
     }
-
-    if (!shuttingDown) {
-      await sleep(config.pollIntervalMs);
-    }
+    if (!shuttingDown) await sleep(config.pollIntervalMs);
   }
 
   log("Print-Agent wurde beendet.");
+  await logger.flush();
 }
 
 function requestShutdown(signal: string): void {
-  if (shuttingDown) {
-    return;
-  }
-
+  if (shuttingDown) return;
   shuttingDown = true;
   log(`${signal} empfangen. Print-Agent wird beendet.`);
 }
@@ -143,10 +134,8 @@ function requestShutdown(signal: string): void {
 process.on("SIGINT", () => requestShutdown("SIGINT"));
 process.on("SIGTERM", () => requestShutdown("SIGTERM"));
 
-void run().catch((error: unknown) => {
-  console.error(
-    `[${new Date().toISOString()}] Print-Agent konnte nicht starten:`,
-    error,
-  );
+void run().catch(async (error: unknown) => {
+  logError(`Print-Agent konnte nicht starten: ${errorMessage(error)}`);
+  if (logger) await logger.flush();
   process.exitCode = 1;
 });

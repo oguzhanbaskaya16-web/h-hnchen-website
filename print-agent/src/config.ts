@@ -12,33 +12,27 @@ export type PrintAgentConfig = {
   outputDirectory: string;
   printExecutable: string | null;
   printTimeoutMs: number;
+  logDirectory: string;
+  logRetentionDays: number;
 };
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
-
-  if (!value) {
-    throw new Error(`${name} muss gesetzt sein.`);
-  }
-
+  if (!value) throw new Error(`${name} muss gesetzt sein.`);
   return value;
 }
 
 function parseBackendUrl(value: string): string {
   const url = new URL(value);
-
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error("PRINT_AGENT_BACKEND_URL muss HTTP oder HTTPS verwenden.");
   }
-
   const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-
   if (url.protocol !== "https:" && !isLocal) {
     throw new Error(
       "Nicht-lokale Backend-Verbindungen müssen HTTPS verwenden.",
     );
   }
-
   return url.toString().replace(/\/$/, "");
 }
 
@@ -50,23 +44,19 @@ function parseInteger(
   maximum: number,
 ): number {
   const parsed = Number(value ?? String(defaultValue));
-
   if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw new Error(`${name} muss zwischen ${minimum} und ${maximum} liegen.`);
   }
-
   return parsed;
 }
 
 function parseMode(value: string | undefined): PrintAgentMode {
   const mode = value?.trim() || "save";
-
   if (mode !== "save" && mode !== "print") {
     throw new Error(
       'PRINT_AGENT_MODE unterstützt ausschließlich "save" oder "print".',
     );
   }
-
   return mode;
 }
 
@@ -78,7 +68,6 @@ export function loadConfig(): PrintAgentConfig {
   if (token.length < 32) {
     throw new Error("PRINT_AGENT_TOKEN muss mindestens 32 Zeichen lang sein.");
   }
-
   if (mode === "print" && !configuredExecutable) {
     throw new Error(
       "PRINT_AGENT_PRINT_EXECUTABLE muss im print-Modus gesetzt sein.",
@@ -110,6 +99,16 @@ export function loadConfig(): PrintAgentConfig {
       30000,
       5000,
       120000,
+    ),
+    logDirectory: path.resolve(
+      process.env.PRINT_AGENT_LOG_DIRECTORY?.trim() || "./logs",
+    ),
+    logRetentionDays: parseInteger(
+      "PRINT_AGENT_LOG_RETENTION_DAYS",
+      process.env.PRINT_AGENT_LOG_RETENTION_DAYS,
+      14,
+      1,
+      365,
     ),
   };
 }
