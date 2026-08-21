@@ -1,0 +1,23 @@
+.topbar {
+  min-height: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 34px;
+  color: #f8f8f6;
+  background: #0c1012;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.topbar h1 { margin: 0; font-family: var(--font-body), sans-serif; font-size: 29px; line-height: 1.15; }
+.topbar p { margin: 7px 0 0; color: #d0d0ce; font-size: 15px; }
+.actions { display: flex; align-items: center; gap: 12px; }
+.notification { position: relative; width: 42px; height: 42px; border: 0; color: #ddd; background: transparent; font-size: 23px; cursor: pointer; }
+.notification span { position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; padding: 0 4px; display: grid; place-items: center; border-radius: 50%; color: white; background: #e21d16; font-size: 11px; font-weight: 700; }
+.userIcon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; font-size: 21px; }
+.user { min-width: 92px; }
+.user strong, .user span { display: block; }
+.user strong { font-size: 14px; }
+.user span { margin-top: 3px; color: #bbb; font-size: 12px; }
+.chevron { color: #bbb; font-size: 18px; }
+@media (max-width: 700px) { .topbar { padding: 18px; } .user, .chevron { display: none; } .topbar h1 { font-size: 24px; } }
